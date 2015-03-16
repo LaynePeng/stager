@@ -1,40 +1,36 @@
-package outbox_test
+package handlers_test
 
 import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"strings"
-	"syscall"
-	"time"
-
 	"net/http"
+	"net/http/httptest"
+	"strings"
+	"time"
 
 	"github.com/cloudfoundry-incubator/receptor"
 	"github.com/cloudfoundry-incubator/runtime-schema/models"
+	"github.com/cloudfoundry-incubator/stager"
 	"github.com/cloudfoundry-incubator/stager/backend"
 	"github.com/cloudfoundry-incubator/stager/backend/fake_backend"
 	"github.com/cloudfoundry-incubator/stager/cc_client"
 	"github.com/cloudfoundry-incubator/stager/cc_client/fakes"
-	"github.com/cloudfoundry-incubator/stager/outbox"
+	"github.com/cloudfoundry-incubator/stager/handlers"
 	"github.com/cloudfoundry/dropsonde/metric_sender/fake"
 	"github.com/cloudfoundry/dropsonde/metrics"
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
 	"github.com/pivotal-golang/clock/fakeclock"
 	"github.com/pivotal-golang/lager"
-	"github.com/tedsuo/ifrit"
+
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Outbox", func() {
+var _ = Describe("StagingCompletedHandler", func() {
 	var (
 		logger lager.Logger
 		appId  string
 		taskId string
-
-		runner  *outbox.Outbox
-		process ifrit.Process
 
 		fakeCCClient        *fakes.FakeCcClient
 		fakeBackend         *fake_backend.FakeBackend
@@ -44,7 +40,8 @@ var _ = Describe("Outbox", func() {
 		metricSender        *fake.FakeMetricSender
 		stagingDurationNano time.Duration
 
-		outboxAddress string
+		handler          handlers.CompletionHandler
+		responseRecorder *httptest.ResponseRecorder
 	)
 
 	BeforeEach(func() {
@@ -53,8 +50,6 @@ var _ = Describe("Outbox", func() {
 
 		appId = "my_app_id"
 		taskId = "do_this"
-
-		outboxAddress = fmt.Sprintf("127.0.0.1:%d", 8888+GinkgoParallelNode())
 
 		stagingDurationNano = 900900
 		metricSender = fake.NewFakeMetricSender()
@@ -68,31 +63,25 @@ var _ = Describe("Outbox", func() {
 
 		fakeClock = fakeclock.NewFakeClock(time.Now())
 
-		runner = outbox.New(outboxAddress, fakeCCClient, []backend.Backend{fakeBackend}, logger, fakeClock)
+		responseRecorder = httptest.NewRecorder()
+		handler = handlers.NewStagingCompletionHandler(logger, fakeCCClient, []backend.Backend{fakeBackend}, fakeClock)
 	})
 
 	JustBeforeEach(func() {
-		process = ifrit.Invoke(runner)
 		fakeBackend.BuildStagingResponseReturns(backendResponse, backendError)
 	})
 
-	AfterEach(func() {
-		process.Signal(syscall.SIGTERM)
-		Eventually(process.Wait()).Should(Receive())
-	})
-
-	postTask := func(task receptor.TaskResponse) *http.Response {
+	postTask := func(task receptor.TaskResponse) *http.Request {
 		taskJSON, err := json.Marshal(task)
 		Ω(err).ShouldNot(HaveOccurred())
 
-		response, err := http.Post("http://"+outboxAddress, "application/json", bytes.NewReader(taskJSON))
+		request, err := http.NewRequest("POST", stager.StagingCompletedRoute, bytes.NewReader(taskJSON))
 		Ω(err).ShouldNot(HaveOccurred())
 
-		return response
+		return request
 	}
 
 	Context("when a staging task completes", func() {
-		var resp *http.Response
 		var taskResponse receptor.TaskResponse
 
 		JustBeforeEach(func() {
@@ -119,11 +108,12 @@ var _ = Describe("Outbox", func() {
 				},
 				Annotation: string(annotationJson),
 			}
-			resp = postTask(taskResponse)
+
+			handler.StagingComplete(responseRecorder, postTask(taskResponse))
 		})
 
 		It("passes the task response to the matching response builder", func() {
-			Eventually(fakeBackend.BuildStagingResponseCallCount).Should(Equal(1))
+			Eventually(fakeBackend.BuildStagingResponseCallCount()).Should(Equal(1))
 			Ω(fakeBackend.BuildStagingResponseArgsForCall(0)).Should(Equal(taskResponse))
 		})
 
@@ -133,7 +123,7 @@ var _ = Describe("Outbox", func() {
 			})
 
 			It("returns a 400", func() {
-				Ω(resp.StatusCode).Should(Equal(http.StatusBadRequest))
+				Ω(responseRecorder.Code).Should(Equal(http.StatusBadRequest))
 			})
 		})
 
@@ -143,29 +133,25 @@ var _ = Describe("Outbox", func() {
 			})
 
 			It("posts the response builder's result to CC", func() {
-				Eventually(fakeCCClient.StagingCompleteCallCount).Should(Equal(1))
+				Ω(fakeCCClient.StagingCompleteCallCount()).Should(Equal(1))
 				payload, _ := fakeCCClient.StagingCompleteArgsForCall(0)
 				Ω(payload).Should(Equal([]byte("fake-response")))
 			})
 
 			Context("when the CC request succeeds", func() {
 				It("increments the staging success counter", func() {
-					Eventually(func() uint64 {
-						return metricSender.GetCounter("StagingRequestsSucceeded")
-					}).Should(Equal(uint64(1)))
+					Ω(metricSender.GetCounter("StagingRequestsSucceeded")).Should(BeEquivalentTo(1))
 				})
 
 				It("emits the time it took to stage succesfully", func() {
-					Eventually(func() fake.Metric {
-						return metricSender.GetValue("StagingRequestSucceededDuration")
-					}).Should(Equal(fake.Metric{
+					Ω(metricSender.GetValue("StagingRequestSucceededDuration")).Should(Equal(fake.Metric{
 						Value: float64(stagingDurationNano),
 						Unit:  "nanos",
 					}))
 				})
 
 				It("returns a 200", func() {
-					Ω(resp.StatusCode).Should(Equal(200))
+					Ω(responseRecorder.Code).Should(Equal(200))
 				})
 			})
 
@@ -175,7 +161,7 @@ var _ = Describe("Outbox", func() {
 				})
 
 				It("responds with the status code that the CC returned", func() {
-					Ω(resp.StatusCode).Should(Equal(504))
+					Ω(responseRecorder.Code).Should(Equal(504))
 				})
 			})
 
@@ -185,43 +171,21 @@ var _ = Describe("Outbox", func() {
 				})
 
 				It("responds with a 503 error", func() {
-					Ω(resp.StatusCode).Should(Equal(503))
+					Ω(responseRecorder.Code).Should(Equal(503))
 				})
 
 				It("does not update the staging counter", func() {
-					Consistently(func() uint64 {
-						return metricSender.GetCounter("StagingRequestsSucceeded")
-					}).Should(Equal(uint64(0)))
+					Ω(metricSender.GetCounter("StagingRequestsSucceeded")).Should(BeEquivalentTo(0))
 				})
 
 				It("does not update the staging duration", func() {
-					Consistently(func() fake.Metric {
-						return metricSender.GetValue("StagingRequestSucceededDuration")
-					}).Should(Equal(fake.Metric{}))
+					Ω(metricSender.GetValue("StagingRequestSucceededDuration")).Should(Equal(fake.Metric{}))
 				})
 			})
-		})
-
-		It("can accept new Completed Tasks before it's done processing existing tasks in the queue", func() {
-			for i := 0; i < 3; i++ {
-				postTask(receptor.TaskResponse{
-					Action: &models.RunAction{
-						Path: "ls",
-					},
-					TaskGuid:   fmt.Sprintf("task-guid-%d", i),
-					Annotation: `{}`,
-					Result:     `{}`,
-					Domain:     "fake-domain",
-				})
-			}
-
-			Eventually(fakeCCClient.StagingCompleteCallCount).Should(Equal(4))
 		})
 	})
 
 	Context("when a staging task fails", func() {
-		var resp *http.Response
-
 		BeforeEach(func() {
 			backendResponse = []byte("fake-response")
 		})
@@ -230,7 +194,7 @@ var _ = Describe("Outbox", func() {
 			createdAt := fakeClock.Now().UnixNano()
 			fakeClock.Increment(stagingDurationNano)
 
-			resp = postTask(receptor.TaskResponse{
+			taskResponse := receptor.TaskResponse{
 				Domain:        "fake-domain",
 				Failed:        true,
 				CreatedAt:     createdAt,
@@ -243,28 +207,28 @@ var _ = Describe("Outbox", func() {
 					Path: "ls",
 				},
 				Result: `{}`,
-			})
+			}
+
+			handler.StagingComplete(responseRecorder, postTask(taskResponse))
 		})
 
 		It("posts the result to CC as an error", func() {
-			Eventually(fakeCCClient.StagingCompleteCallCount).Should(Equal(1))
+			Ω(fakeCCClient.StagingCompleteCallCount()).Should(Equal(1))
 			payload, _ := fakeCCClient.StagingCompleteArgsForCall(0)
 			Ω(payload).Should(Equal([]byte("fake-response")))
 		})
 
 		It("responds with a 200", func() {
-			Ω(resp.StatusCode).Should(Equal(http.StatusOK))
+			Ω(responseRecorder.Code).Should(Equal(http.StatusOK))
 		})
 
 		It("increments the staging failed counter", func() {
-			Eventually(fakeCCClient.StagingCompleteCallCount).Should(Equal(1))
-			Ω(metricSender.GetCounter("StagingRequestsFailed")).Should(Equal(uint64(1)))
+			Ω(fakeCCClient.StagingCompleteCallCount()).Should(Equal(1))
+			Ω(metricSender.GetCounter("StagingRequestsFailed")).Should(BeEquivalentTo(1))
 		})
 
 		It("emits the time it took to stage unsuccesfully", func() {
-			Eventually(func() fake.Metric {
-				return metricSender.GetValue("StagingRequestFailedDuration")
-			}).Should(Equal(fake.Metric{
+			Ω(metricSender.GetValue("StagingRequestFailedDuration")).Should(Equal(fake.Metric{
 				Value: 900900,
 				Unit:  "nanos",
 			}))
@@ -272,10 +236,8 @@ var _ = Describe("Outbox", func() {
 	})
 
 	Context("when a non-staging task is reported", func() {
-		var resp *http.Response
-
 		JustBeforeEach(func() {
-			resp = postTask(receptor.TaskResponse{
+			taskResponse := receptor.TaskResponse{
 				Action: &models.RunAction{
 					Path: "ls",
 				},
@@ -284,25 +246,26 @@ var _ = Describe("Outbox", func() {
 				FailureReason: "because I said so",
 				Annotation:    `{}`,
 				Result:        `{}`,
-			})
+			}
+
+			handler.StagingComplete(responseRecorder, postTask(taskResponse))
 		})
 
 		It("responds with a 404", func() {
-			Ω(resp.StatusCode).Should(Equal(404))
+			Ω(responseRecorder.Code).Should(Equal(404))
 		})
 	})
 
 	Context("when invalid JSON is posted instead of a task", func() {
-		var resp *http.Response
-
 		JustBeforeEach(func() {
-			var err error
-			resp, err = http.Post("http://"+outboxAddress, "application/json", strings.NewReader("{"))
+			request, err := http.NewRequest("POST", stager.StagingCompletedRoute, strings.NewReader("{"))
 			Ω(err).ShouldNot(HaveOccurred())
+
+			handler.StagingComplete(responseRecorder, request)
 		})
 
 		It("responds with a 400", func() {
-			Ω(resp.StatusCode).Should(Equal(400))
+			Ω(responseRecorder.Code).Should(Equal(400))
 		})
 	})
 })

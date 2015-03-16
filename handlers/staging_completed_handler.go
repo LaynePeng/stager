@@ -1,12 +1,9 @@
-package outbox
+package handlers
 
 import (
 	"encoding/json"
 	"net/http"
-	"os"
 	"time"
-
-	"github.com/tedsuo/ifrit/http_server"
 
 	"github.com/cloudfoundry-incubator/receptor"
 	"github.com/cloudfoundry-incubator/runtime-schema/metric"
@@ -24,45 +21,40 @@ const (
 	stagingFailureDuration = metric.Duration("StagingRequestFailedDuration")
 )
 
-type Outbox struct {
-	address  string
+type CompletionHandler interface {
+	StagingComplete(resp http.ResponseWriter, req *http.Request)
+}
+
+type completionHandler struct {
 	ccClient cc_client.CcClient
 	backends []backend.Backend
 	logger   lager.Logger
 	clock    clock.Clock
 }
 
-func New(address string, ccClient cc_client.CcClient, backends []backend.Backend, logger lager.Logger, clock clock.Clock) *Outbox {
-	outboxLogger := logger.Session("outbox")
-
-	return &Outbox{
-		address:  address,
+func NewStagingCompletionHandler(logger lager.Logger, ccClient cc_client.CcClient, backends []backend.Backend, clock clock.Clock) CompletionHandler {
+	return &completionHandler{
 		ccClient: ccClient,
 		backends: backends,
-		logger:   outboxLogger,
+		logger:   logger.Session("completion-handler"),
 		clock:    clock,
 	}
 }
 
-func (o *Outbox) Run(signals <-chan os.Signal, ready chan<- struct{}) error {
-	server := http_server.New(o.address, http.HandlerFunc(o.handleRequest))
-	return server.Run(signals, ready)
-}
-
-func (o *Outbox) handleRequest(res http.ResponseWriter, req *http.Request) {
+func (handler *completionHandler) StagingComplete(res http.ResponseWriter, req *http.Request) {
 	var task receptor.TaskResponse
 	err := json.NewDecoder(req.Body).Decode(&task)
 	if err != nil {
-		o.logger.Error("parsing-incoming-task-failed", err)
-		res.WriteHeader(400)
+		handler.logger.Error("parsing-incoming-task-failed", err)
+		res.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	logger := o.logger.Session("task-complete-callback-received", lager.Data{
+	logger := handler.logger.Session("task-complete-callback-received", lager.Data{
 		"guid": task.TaskGuid,
 	})
 
-	responseJson, err := o.stagingResponse(task)
+	responseJson, err := handler.stagingResponse(task)
 	if err != nil {
 		res.WriteHeader(http.StatusBadRequest)
 		logger.Error("get-staging-response-failed", err)
@@ -70,7 +62,7 @@ func (o *Outbox) handleRequest(res http.ResponseWriter, req *http.Request) {
 	}
 
 	if responseJson == nil {
-		res.WriteHeader(404)
+		res.WriteHeader(http.StatusNotFound)
 		res.Write([]byte("Unknown task domain"))
 		return
 	}
@@ -79,25 +71,25 @@ func (o *Outbox) handleRequest(res http.ResponseWriter, req *http.Request) {
 		"payload": responseJson,
 	})
 
-	err = o.ccClient.StagingComplete(responseJson, logger)
+	err = handler.ccClient.StagingComplete(responseJson, logger)
 	if err != nil {
-		logger.Error("cc-request-failed", err)
+		logger.Error("cc-staging-complete-failed", err)
 		if responseErr, ok := err.(*cc_client.BadResponseError); ok {
 			res.WriteHeader(responseErr.StatusCode)
 		} else {
-			res.WriteHeader(503)
+			res.WriteHeader(http.StatusServiceUnavailable)
 		}
 		return
 	}
 
-	o.reportMetrics(task)
+	handler.reportMetrics(task)
 
 	logger.Info("posted-staging-complete")
 	res.WriteHeader(http.StatusOK)
 }
 
-func (o *Outbox) reportMetrics(task receptor.TaskResponse) {
-	duration := o.clock.Now().Sub(time.Unix(0, task.CreatedAt))
+func (handler *completionHandler) reportMetrics(task receptor.TaskResponse) {
+	duration := handler.clock.Now().Sub(time.Unix(0, task.CreatedAt))
 	if task.Failed {
 		stagingFailureCounter.Increment()
 		stagingFailureDuration.Send(duration)
@@ -107,8 +99,8 @@ func (o *Outbox) reportMetrics(task receptor.TaskResponse) {
 	}
 }
 
-func (o *Outbox) stagingResponse(task receptor.TaskResponse) ([]byte, error) {
-	for _, backend := range o.backends {
+func (handler *completionHandler) stagingResponse(task receptor.TaskResponse) ([]byte, error) {
+	for _, backend := range handler.backends {
 		if backend.TaskDomain() == task.Domain {
 			return backend.BuildStagingResponse(task)
 		}
