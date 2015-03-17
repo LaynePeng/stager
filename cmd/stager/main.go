@@ -132,8 +132,14 @@ func initializeBackends(logger lager.Logger) map[string]backend.Backend {
 	if err != nil {
 		logger.Fatal("Error parsing lifecycles flag", err)
 	}
+	callbackURL, err := url.Parse(*stagerURL)
+	if err != nil {
+		logger.Fatal("Error parsing stager URL", err)
+	}
+
+	callbackURL.Path = "/v1/completed"
 	config := backend.Config{
-		CallbackURL:    *stagerURL,
+		CallbackURL:    callbackURL.String(),
 		FileServerURL:  *fileServerURL,
 		Lifecycles:     lifecyclesMap,
 		SkipCertVerify: *skipCertVerify,

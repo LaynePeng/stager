@@ -26,11 +26,14 @@ var _ = Describe("Stager", func() {
 
 		requestGenerator *rata.RequestGenerator
 		httpClient       *http.Client
+
+		callbackURL string
 	)
 
 	BeforeEach(func() {
 		stagerPort := 8888 + GinkgoParallelNode()
 		stagerURL := fmt.Sprintf("http://127.0.0.1:%d", stagerPort)
+		callbackURL = stagerURL + "/v1/completed"
 
 		fakeReceptor = ghttp.NewServer()
 		fakeCC = ghttp.NewServer()
@@ -68,10 +71,10 @@ var _ = Describe("Stager", func() {
 
 					Ω(taskRequest.MemoryMB).Should(Equal(1024))
 					Ω(taskRequest.DiskMB).Should(Equal(128))
-					Ω(taskRequest.CompletionCallbackURL).Should(Equal(runner.Config.StagerURL))
+					Ω(taskRequest.CompletionCallbackURL).Should(Equal(callbackURL))
 				})
 
-				req, err := requestGenerator.CreateRequest(stager.StageRoute, rata.Params{"staging_task": "my-task-guid"}, strings.NewReader(`{
+				req, err := requestGenerator.CreateRequest(stager.StageRoute, rata.Params{}, strings.NewReader(`{
 					"app_id":"my-app-guid",
 					"task_id":"my-task-guid",
 					"stack":"lucid64",
@@ -106,10 +109,10 @@ var _ = Describe("Stager", func() {
 
 					Ω(taskRequest.MemoryMB).Should(Equal(1024))
 					Ω(taskRequest.DiskMB).Should(Equal(128))
-					Ω(taskRequest.CompletionCallbackURL).Should(Equal(runner.Config.StagerURL))
+					Ω(taskRequest.CompletionCallbackURL).Should(Equal(callbackURL))
 				})
 
-				req, err := requestGenerator.CreateRequest(stager.StageRoute, rata.Params{"staging_task": "my-task-guid"}, strings.NewReader(`{
+				req, err := requestGenerator.CreateRequest(stager.StageRoute, rata.Params{}, strings.NewReader(`{
 					"app_id":"my-app-guid",
 					"task_id":"my-task-guid",
 					"stack":"lucid64",
@@ -167,7 +170,7 @@ var _ = Describe("Stager", func() {
 					})
 					Ω(err).ShouldNot(HaveOccurred())
 
-					req, err := requestGenerator.CreateRequest(stager.StagingCompletedRoute, rata.Params{"staging_task": "task-id"}, bytes.NewReader(taskJSON))
+					req, err := requestGenerator.CreateRequest(stager.StagingCompletedRoute, rata.Params{}, bytes.NewReader(taskJSON))
 					Ω(err).ShouldNot(HaveOccurred())
 
 					req.Header.Set("Content-Type", "application/json")
@@ -220,7 +223,7 @@ var _ = Describe("Stager", func() {
 					})
 					Ω(err).ShouldNot(HaveOccurred())
 
-					req, err := requestGenerator.CreateRequest(stager.StagingCompletedRoute, rata.Params{"staging_task": "task-id"}, bytes.NewReader(taskJSON))
+					req, err := requestGenerator.CreateRequest(stager.StagingCompletedRoute, rata.Params{}, bytes.NewReader(taskJSON))
 					Ω(err).ShouldNot(HaveOccurred())
 
 					req.Header.Set("Content-Type", "application/json")
