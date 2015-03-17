@@ -30,7 +30,7 @@ func NewStagingHandler(
 	ccClient cc_client.CcClient,
 	diegoClient receptor.Client,
 ) StagingHandler {
-	logger = logger.Session("staging-handler") //, lager.Data{"TaskDomain": backend.TaskDomain()})
+	logger = logger.Session("staging-handler")
 
 	return &stagingHandler{
 		logger:      logger,
