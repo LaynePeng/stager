@@ -145,8 +145,30 @@ var _ = Describe("StagingHandler", func() {
 						Ω(logger).Should(gbytes.Say("staging-failed"))
 					})
 
-					It("sends a staging failure response", func() {
-						Ω(fakeCcClient.StagingCompleteCallCount()).To(Equal(1))
+					It("returns an internal service error status code", func() {
+						Ω(responseRecorder.Code).Should(Equal(http.StatusInternalServerError))
+					})
+
+					It("should not call staging complete", func() {
+						Ω(fakeCcClient.StagingCompleteCallCount()).To(Equal(0))
+					})
+
+					Context("when the response builder succeeds", func() {
+						var responseForCC cc_messages.StagingResponseForCC
+
+						BeforeEach(func() {
+							responseForCC = cc_messages.StagingResponseForCC{Error: &cc_messages.StagingError{Message: "create task error"}}
+							fakeBackend.BuildStagingResponseFromRequestErrorReturns(responseForCC)
+						})
+
+						It("returns the cloud controller error response", func() {
+							var response cc_messages.StagingResponseForCC
+							decoder := json.NewDecoder(responseRecorder.Body)
+							err := decoder.Decode(&response)
+							Ω(err).ShouldNot(HaveOccurred())
+
+							Ω(response).Should(Equal(responseForCC))
+						})
 					})
 				})
 			})
@@ -160,19 +182,29 @@ var _ = Describe("StagingHandler", func() {
 					Ω(logger).Should(gbytes.Say("recipe-building-failed"))
 				})
 
+				It("returns an internal service error status code", func() {
+					Ω(responseRecorder.Code).Should(Equal(http.StatusInternalServerError))
+				})
+
+				It("should not call staging complete", func() {
+					Ω(fakeCcClient.StagingCompleteCallCount()).To(Equal(0))
+				})
+
 				Context("when the response builder succeeds", func() {
+					var responseForCC cc_messages.StagingResponseForCC
+
 					BeforeEach(func() {
-						responseForCC := cc_messages.StagingResponseForCC{Error: &cc_messages.StagingError{Message: "some fake error"}}
+						responseForCC = cc_messages.StagingResponseForCC{Error: &cc_messages.StagingError{Message: "some fake error"}}
 						fakeBackend.BuildStagingResponseFromRequestErrorReturns(responseForCC)
 					})
 
-					It("sends a staging failure response", func() {
-						Ω(fakeCcClient.StagingCompleteCallCount()).To(Equal(1))
-						response, _ := fakeCcClient.StagingCompleteArgsForCall(0)
+					It("returns the cloud controller error response", func() {
+						var response cc_messages.StagingResponseForCC
+						decoder := json.NewDecoder(responseRecorder.Body)
+						err := decoder.Decode(&response)
+						Ω(err).ShouldNot(HaveOccurred())
 
-						stagingResponse := cc_messages.StagingResponseForCC{}
-						json.Unmarshal(response, &stagingResponse)
-						Ω(stagingResponse.Error).Should(Equal(&cc_messages.StagingError{Message: "some fake error"}))
+						Ω(response).Should(Equal(responseForCC))
 					})
 				})
 			})

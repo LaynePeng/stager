@@ -72,13 +72,16 @@ func (handler *stagingHandler) Stage(resp http.ResponseWriter, req *http.Request
 		return
 	}
 
-	resp.WriteHeader(http.StatusAccepted)
 	backend.StagingRequestsReceivedCounter().Increment()
 
 	taskRequest, err := backend.BuildRecipe(stagingRequest)
 	if err != nil {
 		logger.Error("recipe-building-failed", err, lager.Data{"staging-request": stagingRequest})
-		handler.sendStagingCompleteError(logger, backend, "Recipe building failed: ", err, stagingRequest)
+
+		resp.WriteHeader(http.StatusInternalServerError)
+		response := backend.BuildStagingResponseFromRequestError(stagingRequest, "Recipe building failed: "+err.Error())
+		responseJson, _ := json.Marshal(response)
+		resp.Write(responseJson)
 		return
 	}
 
@@ -86,6 +89,7 @@ func (handler *stagingHandler) Stage(resp http.ResponseWriter, req *http.Request
 		"task_guid":    taskRequest.TaskGuid,
 		"callback_url": taskRequest.CompletionCallbackURL,
 	})
+
 	err = handler.diegoClient.CreateTask(taskRequest)
 	if receptorErr, ok := err.(receptor.Error); ok {
 		if receptorErr.Type == receptor.TaskGuidAlreadyExists {
@@ -95,8 +99,15 @@ func (handler *stagingHandler) Stage(resp http.ResponseWriter, req *http.Request
 
 	if err != nil {
 		logger.Error("staging-failed", err, lager.Data{"staging-request": stagingRequest})
-		handler.sendStagingCompleteError(logger, backend, "Staging failed: ", err, stagingRequest)
+
+		resp.WriteHeader(http.StatusInternalServerError)
+		response := backend.BuildStagingResponseFromRequestError(stagingRequest, "Staging failed: "+err.Error())
+		responseJson, _ := json.Marshal(response)
+		resp.Write(responseJson)
+		return
 	}
+
+	resp.WriteHeader(http.StatusAccepted)
 }
 
 func (handler *stagingHandler) StopStaging(resp http.ResponseWriter, req *http.Request) {
@@ -146,15 +157,4 @@ func (handler *stagingHandler) StopStaging(resp http.ResponseWriter, req *http.R
 	if err != nil {
 		logger.Error("stop-staging-failed", err, lager.Data{"stop-staging-request": requestBody})
 	}
-}
-
-func (handler *stagingHandler) sendStagingCompleteError(logger lager.Logger, backend backend.Backend, messagePrefix string, err error, stagingRequest cc_messages.StagingRequestFromCC) {
-	response := backend.BuildStagingResponseFromRequestError(stagingRequest, messagePrefix+err.Error())
-	responseJson, err := json.Marshal(response)
-	if err != nil {
-		logger.Error("marshalling-build-staging-response-failed", err)
-		return
-	}
-
-	handler.ccClient.StagingComplete(responseJson, logger)
 }
