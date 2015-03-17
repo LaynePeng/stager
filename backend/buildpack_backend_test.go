@@ -14,6 +14,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/pivotal-golang/lager"
+	"github.com/pivotal-golang/lager/lagertest"
 )
 
 var _ = Describe("TraditionalBackend", func() {
@@ -63,8 +64,7 @@ var _ = Describe("TraditionalBackend", func() {
 			},
 		}
 
-		logger := lager.NewLogger("fakelogger")
-		logger.RegisterSink(lager.NewWriterSink(GinkgoWriter, lager.DEBUG))
+		logger := lagertest.NewTestLogger("test")
 
 		traditional = backend.NewTraditionalBackend(config, logger)
 
@@ -213,16 +213,19 @@ var _ = Describe("TraditionalBackend", func() {
 			JustBeforeEach(func() {
 				stagingRequestJson = []byte("bad-json")
 			})
+
 			It("returns an error", func() {
 				_, err := traditional.BuildRecipe(stagingRequestJson)
 				Ω(err).Should(HaveOccurred())
 				Ω(err).Should(BeAssignableToTypeOf(&json.SyntaxError{}))
 			})
 		})
+
 		Context("with a missing app id", func() {
 			BeforeEach(func() {
 				appId = ""
 			})
+
 			It("returns an error", func() {
 				_, err := traditional.BuildRecipe(stagingRequestJson)
 				Ω(err).Should(Equal(backend.ErrMissingAppId))
@@ -233,6 +236,7 @@ var _ = Describe("TraditionalBackend", func() {
 			BeforeEach(func() {
 				taskId = ""
 			})
+
 			It("returns an error", func() {
 				_, err := traditional.BuildRecipe(stagingRequestJson)
 				Ω(err).Should(Equal(backend.ErrMissingTaskId))
@@ -243,6 +247,7 @@ var _ = Describe("TraditionalBackend", func() {
 			BeforeEach(func() {
 				appBitsDownloadUri = ""
 			})
+
 			It("returns an error", func() {
 				_, err := traditional.BuildRecipe(stagingRequestJson)
 				Ω(err).Should(Equal(backend.ErrMissingAppBitsDownloadUri))

@@ -27,12 +27,12 @@ type CompletionHandler interface {
 
 type completionHandler struct {
 	ccClient cc_client.CcClient
-	backends []backend.Backend
+	backends map[string]backend.Backend
 	logger   lager.Logger
 	clock    clock.Clock
 }
 
-func NewStagingCompletionHandler(logger lager.Logger, ccClient cc_client.CcClient, backends []backend.Backend, clock clock.Clock) CompletionHandler {
+func NewStagingCompletionHandler(logger lager.Logger, ccClient cc_client.CcClient, backends map[string]backend.Backend, clock clock.Clock) CompletionHandler {
 	return &completionHandler{
 		ccClient: ccClient,
 		backends: backends,

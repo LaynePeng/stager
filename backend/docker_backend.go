@@ -21,9 +21,7 @@ import (
 const (
 	DockerTaskDomain                         = "cf-app-docker-staging"
 	DockerLifecycleFilename                  = "docker_app_lifecycle.zip"
-	DockerStagingRequestsNatsSubject         = "diego.docker.staging.start"
 	DockerStagingRequestsReceivedCounter     = metric.Counter("DockerStagingRequestsReceived")
-	DockerStopStagingRequestsNatsSubject     = "diego.docker.staging.stop"
 	DockerStopStagingRequestsReceivedCounter = metric.Counter("DockerStopStagingRequestsReceived")
 	DockerBuilderExecutablePath              = "/tmp/docker_app_lifecycle/builder"
 	DockerBuilderOutputPath                  = "/tmp/docker-result/result.json"
@@ -43,16 +41,8 @@ func NewDockerBackend(config Config, logger lager.Logger) Backend {
 	}
 }
 
-func (backend *dockerBackend) StagingRequestsNatsSubject() string {
-	return DockerStagingRequestsNatsSubject
-}
-
 func (backend *dockerBackend) StagingRequestsReceivedCounter() metric.Counter {
 	return DockerStagingRequestsReceivedCounter
-}
-
-func (backend *dockerBackend) StopStagingRequestsNatsSubject() string {
-	return DockerStopStagingRequestsNatsSubject
 }
 
 func (backend *dockerBackend) StopStagingRequestsReceivedCounter() metric.Counter {

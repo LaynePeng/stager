@@ -64,7 +64,7 @@ var _ = Describe("StagingCompletedHandler", func() {
 		fakeClock = fakeclock.NewFakeClock(time.Now())
 
 		responseRecorder = httptest.NewRecorder()
-		handler = handlers.NewStagingCompletionHandler(logger, fakeCCClient, []backend.Backend{fakeBackend}, fakeClock)
+		handler = handlers.NewStagingCompletionHandler(logger, fakeCCClient, map[string]backend.Backend{"fake-backend": fakeBackend}, fakeClock)
 	})
 
 	JustBeforeEach(func() {

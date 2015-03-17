@@ -20,9 +20,8 @@ const (
 
 type FailureReasonSanitizer func(string) *cc_messages.StagingError
 
+//go:generate counterfeiter -o fake_backend/fake_backend.go . Backend
 type Backend interface {
-	StagingRequestsNatsSubject() string
-	StopStagingRequestsNatsSubject() string
 	StagingRequestsReceivedCounter() metric.Counter
 	StopStagingRequestsReceivedCounter() metric.Counter
 	TaskDomain() string

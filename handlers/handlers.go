@@ -12,9 +12,9 @@ import (
 	"github.com/tedsuo/rata"
 )
 
-func New(logger lager.Logger, ccClient cc_client.CcClient, diegoClient receptor.Client, backends []backend.Backend, clock clock.Clock) http.Handler {
+func New(logger lager.Logger, ccClient cc_client.CcClient, diegoClient receptor.Client, backends map[string]backend.Backend, clock clock.Clock) http.Handler {
 
-	stagingHandler := NewStagingHandler(logger, diegoClient, backends)
+	stagingHandler := NewStagingHandler(logger, backends, ccClient, diegoClient)
 	stagingCompletedHandler := NewStagingCompletionHandler(logger, ccClient, backends, clock)
 
 	actions := rata.Handlers{

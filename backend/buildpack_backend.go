@@ -22,9 +22,7 @@ import (
 
 const (
 	TraditionalTaskDomain                         = "cf-app-staging"
-	TraditionalStagingRequestsNatsSubject         = "diego.staging.start"
 	TraditionalStagingRequestsReceivedCounter     = metric.Counter("TraditionalStagingRequestsReceived")
-	TraditionalStopStagingRequestsNatsSubject     = "diego.staging.stop"
 	TraditionalStopStagingRequestsReceivedCounter = metric.Counter("TraditionalStopStagingRequestsReceived")
 	StagingTaskCpuWeight                          = uint(50)
 
@@ -43,16 +41,8 @@ func NewTraditionalBackend(config Config, logger lager.Logger) Backend {
 	}
 }
 
-func (backend *traditionalBackend) StagingRequestsNatsSubject() string {
-	return TraditionalStagingRequestsNatsSubject
-}
-
 func (backend *traditionalBackend) StagingRequestsReceivedCounter() metric.Counter {
 	return TraditionalStagingRequestsReceivedCounter
-}
-
-func (backend *traditionalBackend) StopStagingRequestsNatsSubject() string {
-	return TraditionalStopStagingRequestsNatsSubject
 }
 
 func (backend *traditionalBackend) StopStagingRequestsReceivedCounter() metric.Counter {
