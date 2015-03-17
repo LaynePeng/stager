@@ -52,7 +52,11 @@ var _ = Describe("Stager", func() {
 
 	Context("when started", func() {
 		BeforeEach(func() {
-			runner.Start("--lifecycles", `{"lucid64":"lifecycle.zip"}`)
+			lifecycles := `{
+				"lucid64": "lifecycle.zip",
+				"docker": "docker/lifecycle.tgz"
+			}`
+			runner.Start("--lifecycles", lifecycles)
 		})
 
 		Describe("when a buildpack staging request is received", func() {

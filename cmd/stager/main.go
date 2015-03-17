@@ -54,12 +54,6 @@ var lifecycles = flag.String(
 	"Map of lifecycles for different stacks (name => compiler_name)",
 )
 
-var dockerLifecyclePath = flag.String(
-	"dockerLifecyclePath",
-	"",
-	"path for downloading docker lifecycle from file server",
-)
-
 var diegoAPIURL = flag.String(
 	"diegoAPIURL",
 	"",
@@ -139,12 +133,11 @@ func initializeBackends(logger lager.Logger) map[string]backend.Backend {
 		logger.Fatal("Error parsing lifecycles flag", err)
 	}
 	config := backend.Config{
-		CallbackURL:         *stagerURL,
-		FileServerURL:       *fileServerURL,
-		Lifecycles:          lifecyclesMap,
-		DockerLifecyclePath: *dockerLifecyclePath,
-		SkipCertVerify:      *skipCertVerify,
-		Sanitizer:           cc_messages.SanitizeErrorMessage,
+		CallbackURL:    *stagerURL,
+		FileServerURL:  *fileServerURL,
+		Lifecycles:     lifecyclesMap,
+		SkipCertVerify: *skipCertVerify,
+		Sanitizer:      cc_messages.SanitizeErrorMessage,
 	}
 
 	return map[string]backend.Backend{

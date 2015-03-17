@@ -40,12 +40,11 @@ var ErrMissingAppBitsDownloadUri = errors.New(diego_errors.MISSING_APP_BITS_DOWN
 var ErrMissingLifecycleData = errors.New(diego_errors.MISSING_LIFECYCLE_DATA_MESSAGE)
 
 type Config struct {
-	CallbackURL         string
-	FileServerURL       string
-	Lifecycles          map[string]string
-	DockerLifecyclePath string
-	SkipCertVerify      bool
-	Sanitizer           FailureReasonSanitizer
+	CallbackURL    string
+	FileServerURL  string
+	Lifecycles     map[string]string
+	SkipCertVerify bool
+	Sanitizer      FailureReasonSanitizer
 }
 
 func max(x, y uint64) uint64 {

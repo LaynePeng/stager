@@ -20,7 +20,6 @@ import (
 
 const (
 	DockerTaskDomain                         = "cf-app-docker-staging"
-	DockerLifecycleFilename                  = "docker_app_lifecycle.zip"
 	DockerStagingRequestsReceivedCounter     = metric.Counter("DockerStagingRequestsReceived")
 	DockerStopStagingRequestsReceivedCounter = metric.Counter("DockerStopStagingRequestsReceived")
 	DockerBuilderExecutablePath              = "/tmp/docker_app_lifecycle/builder"
@@ -28,6 +27,7 @@ const (
 )
 
 var ErrMissingDockerImageUrl = errors.New("missing docker image download url")
+var ErrMissingDockerLifecycle = errors.New("missing docker image download url")
 
 type dockerBackend struct {
 	config Config
@@ -206,13 +206,11 @@ func (backend *dockerBackend) StagingTaskGuid(requestJson []byte) (string, error
 }
 
 func (backend *dockerBackend) compilerDownloadURL() (*url.URL, error) {
-
-	var lifecycleFilename string
-	if len(backend.config.DockerLifecyclePath) > 0 {
-		lifecycleFilename = backend.config.DockerLifecyclePath
-	} else {
-		lifecycleFilename = DockerLifecycleFilename
+	lifecycleFilename := backend.config.Lifecycles["docker"]
+	if lifecycleFilename == "" {
+		return nil, ErrMissingDockerLifecycle
 	}
+
 	parsed, err := url.Parse(lifecycleFilename)
 	if err != nil {
 		return nil, errors.New("couldn't parse compiler URL")

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	docker_app_lifecycle "github.com/cloudfoundry-incubator/docker_app_lifecycle"
+	"github.com/cloudfoundry-incubator/docker_app_lifecycle"
 	"github.com/cloudfoundry-incubator/receptor"
 	"github.com/cloudfoundry-incubator/runtime-schema/cc_messages"
 	"github.com/cloudfoundry-incubator/runtime-schema/models"
@@ -53,6 +53,7 @@ var _ = Describe("DockerBackend", func() {
 				"rabbit_hole":            "rabbit-hole-compiler",
 				"compiler_with_full_url": "http://the-full-compiler-url",
 				"compiler_with_bad_url":  "ftp://the-bad-compiler-url",
+				"docker":                 "docker_lifecycle/docker_app_lifecycle.tgz",
 			},
 			Sanitizer: func(msg string) *cc_messages.StagingError {
 				return &cc_messages.StagingError{Message: msg + " was totally sanitized"}
@@ -66,7 +67,7 @@ var _ = Describe("DockerBackend", func() {
 
 		downloadBuilderAction = models.EmitProgressFor(
 			&models.DownloadAction{
-				From:     "http://file-server.com/v1/static/docker_app_lifecycle.zip",
+				From:     "http://file-server.com/v1/static/docker_lifecycle/docker_app_lifecycle.tgz",
 				To:       "/tmp/docker_app_lifecycle",
 				CacheKey: "builder-docker",
 			},
@@ -185,6 +186,30 @@ var _ = Describe("DockerBackend", func() {
 			It("returns an error", func() {
 				_, err := docker.BuildRecipe(stagingRequestJson)
 				Ω(err).Should(Equal(backend.ErrMissingDockerImageUrl))
+			})
+		})
+	})
+
+	Describe("docker lifeycle config", func() {
+		Context("when the docker lifecycle is missing", func() {
+			BeforeEach(func() {
+				delete(config.Lifecycles, "docker")
+			})
+
+			It("returns an error", func() {
+				_, err := docker.BuildRecipe(stagingRequestJson)
+				Ω(err).Should(Equal(backend.ErrMissingDockerLifecycle))
+			})
+		})
+
+		Context("when the docker lifecycle is empty", func() {
+			BeforeEach(func() {
+				config.Lifecycles["docker"] = ""
+			})
+
+			It("returns an error", func() {
+				_, err := docker.BuildRecipe(stagingRequestJson)
+				Ω(err).Should(Equal(backend.ErrMissingDockerLifecycle))
 			})
 		})
 	})
