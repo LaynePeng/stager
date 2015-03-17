@@ -27,7 +27,6 @@ const (
 )
 
 var ErrMissingDockerImageUrl = errors.New("missing docker image download url")
-var ErrMissingDockerLifecycle = errors.New("missing docker image download url")
 
 type dockerBackend struct {
 	config Config
@@ -53,18 +52,12 @@ func (backend *dockerBackend) TaskDomain() string {
 	return DockerTaskDomain
 }
 
-func (backend *dockerBackend) BuildRecipe(requestJson []byte) (receptor.TaskCreateRequest, error) {
+func (backend *dockerBackend) BuildRecipe(request cc_messages.StagingRequestFromCC) (receptor.TaskCreateRequest, error) {
 	logger := backend.logger.Session("build-recipe")
-
-	var request cc_messages.StagingRequestFromCC
-	err := json.Unmarshal(requestJson, &request)
-	if err != nil {
-		return receptor.TaskCreateRequest{}, err
-	}
 	logger.Info("staging-request", lager.Data{"Request": request})
 
 	var lifecycleData cc_messages.DockerStagingData
-	err = json.Unmarshal(*request.LifecycleData, &lifecycleData)
+	err := json.Unmarshal(*request.LifecycleData, &lifecycleData)
 	if err != nil {
 		return receptor.TaskCreateRequest{}, err
 	}
@@ -142,30 +135,21 @@ func (backend *dockerBackend) BuildRecipe(requestJson []byte) (receptor.TaskCrea
 	return task, nil
 }
 
-func (backend *dockerBackend) BuildStagingResponseFromRequestError(requestJson []byte, errorMessage string) ([]byte, error) {
-	request := cc_messages.StagingRequestFromCC{}
-
-	err := json.Unmarshal(requestJson, &request)
-	if err != nil {
-		return nil, err
-	}
-
-	response := cc_messages.StagingResponseForCC{
+func (backend *dockerBackend) BuildStagingResponseFromRequestError(request cc_messages.StagingRequestFromCC, errorMessage string) cc_messages.StagingResponseForCC {
+	return cc_messages.StagingResponseForCC{
 		AppId:  request.AppId,
 		TaskId: request.TaskId,
 		Error:  backend.config.Sanitizer(errorMessage),
 	}
-
-	return json.Marshal(response)
 }
 
-func (backend *dockerBackend) BuildStagingResponse(taskResponse receptor.TaskResponse) ([]byte, error) {
+func (backend *dockerBackend) BuildStagingResponse(taskResponse receptor.TaskResponse) (cc_messages.StagingResponseForCC, error) {
 	var response cc_messages.StagingResponseForCC
 
 	var annotation models.StagingTaskAnnotation
 	err := json.Unmarshal([]byte(taskResponse.Annotation), &annotation)
 	if err != nil {
-		return nil, err
+		return cc_messages.StagingResponseForCC{}, err
 	}
 
 	response.AppId = annotation.AppId
@@ -177,23 +161,17 @@ func (backend *dockerBackend) BuildStagingResponse(taskResponse receptor.TaskRes
 		var result docker_app_lifecycle.StagingDockerResult
 		err := json.Unmarshal([]byte(taskResponse.Result), &result)
 		if err != nil {
-			return nil, err
+			return cc_messages.StagingResponseForCC{}, err
 		}
 
 		response.ExecutionMetadata = result.ExecutionMetadata
 		response.DetectedStartCommand = result.DetectedStartCommand
 	}
 
-	return json.Marshal(response)
+	return response, nil
 }
 
-func (backend *dockerBackend) StagingTaskGuid(requestJson []byte) (string, error) {
-	var request cc_messages.StopStagingRequestFromCC
-	err := json.Unmarshal(requestJson, &request)
-	if err != nil {
-		return "", err
-	}
-
+func (backend *dockerBackend) StagingTaskGuid(request cc_messages.StopStagingRequestFromCC) (string, error) {
 	if request.AppId == "" {
 		return "", ErrMissingAppId
 	}
@@ -208,7 +186,7 @@ func (backend *dockerBackend) StagingTaskGuid(requestJson []byte) (string, error
 func (backend *dockerBackend) compilerDownloadURL() (*url.URL, error) {
 	lifecycleFilename := backend.config.Lifecycles["docker"]
 	if lifecycleFilename == "" {
-		return nil, ErrMissingDockerLifecycle
+		return nil, ErrNoCompilerDefined
 	}
 
 	parsed, err := url.Parse(lifecycleFilename)

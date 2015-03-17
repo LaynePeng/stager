@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/cloudfoundry-incubator/receptor"
+	"github.com/cloudfoundry-incubator/runtime-schema/cc_messages"
 	"github.com/cloudfoundry-incubator/runtime-schema/metric"
 	"github.com/cloudfoundry-incubator/stager/backend"
 )
@@ -28,38 +29,37 @@ type FakeBackend struct {
 	taskDomainReturns struct {
 		result1 string
 	}
-	BuildRecipeStub        func(requestJson []byte) (receptor.TaskCreateRequest, error)
+	BuildRecipeStub        func(request cc_messages.StagingRequestFromCC) (receptor.TaskCreateRequest, error)
 	buildRecipeMutex       sync.RWMutex
 	buildRecipeArgsForCall []struct {
-		requestJson []byte
+		request cc_messages.StagingRequestFromCC
 	}
 	buildRecipeReturns struct {
 		result1 receptor.TaskCreateRequest
 		result2 error
 	}
-	BuildStagingResponseStub        func(receptor.TaskResponse) ([]byte, error)
+	BuildStagingResponseStub        func(receptor.TaskResponse) (cc_messages.StagingResponseForCC, error)
 	buildStagingResponseMutex       sync.RWMutex
 	buildStagingResponseArgsForCall []struct {
 		arg1 receptor.TaskResponse
 	}
 	buildStagingResponseReturns struct {
-		result1 []byte
+		result1 cc_messages.StagingResponseForCC
 		result2 error
 	}
-	BuildStagingResponseFromRequestErrorStub        func(requestJson []byte, errorMessage string) ([]byte, error)
+	BuildStagingResponseFromRequestErrorStub        func(request cc_messages.StagingRequestFromCC, errorMessage string) cc_messages.StagingResponseForCC
 	buildStagingResponseFromRequestErrorMutex       sync.RWMutex
 	buildStagingResponseFromRequestErrorArgsForCall []struct {
-		requestJson  []byte
+		request      cc_messages.StagingRequestFromCC
 		errorMessage string
 	}
 	buildStagingResponseFromRequestErrorReturns struct {
-		result1 []byte
-		result2 error
+		result1 cc_messages.StagingResponseForCC
 	}
-	StagingTaskGuidStub        func(requestJson []byte) (string, error)
+	StagingTaskGuidStub        func(request cc_messages.StopStagingRequestFromCC) (string, error)
 	stagingTaskGuidMutex       sync.RWMutex
 	stagingTaskGuidArgsForCall []struct {
-		requestJson []byte
+		request cc_messages.StopStagingRequestFromCC
 	}
 	stagingTaskGuidReturns struct {
 		result1 string
@@ -139,14 +139,14 @@ func (fake *FakeBackend) TaskDomainReturns(result1 string) {
 	}{result1}
 }
 
-func (fake *FakeBackend) BuildRecipe(requestJson []byte) (receptor.TaskCreateRequest, error) {
+func (fake *FakeBackend) BuildRecipe(request cc_messages.StagingRequestFromCC) (receptor.TaskCreateRequest, error) {
 	fake.buildRecipeMutex.Lock()
 	fake.buildRecipeArgsForCall = append(fake.buildRecipeArgsForCall, struct {
-		requestJson []byte
-	}{requestJson})
+		request cc_messages.StagingRequestFromCC
+	}{request})
 	fake.buildRecipeMutex.Unlock()
 	if fake.BuildRecipeStub != nil {
-		return fake.BuildRecipeStub(requestJson)
+		return fake.BuildRecipeStub(request)
 	} else {
 		return fake.buildRecipeReturns.result1, fake.buildRecipeReturns.result2
 	}
@@ -158,10 +158,10 @@ func (fake *FakeBackend) BuildRecipeCallCount() int {
 	return len(fake.buildRecipeArgsForCall)
 }
 
-func (fake *FakeBackend) BuildRecipeArgsForCall(i int) []byte {
+func (fake *FakeBackend) BuildRecipeArgsForCall(i int) cc_messages.StagingRequestFromCC {
 	fake.buildRecipeMutex.RLock()
 	defer fake.buildRecipeMutex.RUnlock()
-	return fake.buildRecipeArgsForCall[i].requestJson
+	return fake.buildRecipeArgsForCall[i].request
 }
 
 func (fake *FakeBackend) BuildRecipeReturns(result1 receptor.TaskCreateRequest, result2 error) {
@@ -172,7 +172,7 @@ func (fake *FakeBackend) BuildRecipeReturns(result1 receptor.TaskCreateRequest, 
 	}{result1, result2}
 }
 
-func (fake *FakeBackend) BuildStagingResponse(arg1 receptor.TaskResponse) ([]byte, error) {
+func (fake *FakeBackend) BuildStagingResponse(arg1 receptor.TaskResponse) (cc_messages.StagingResponseForCC, error) {
 	fake.buildStagingResponseMutex.Lock()
 	fake.buildStagingResponseArgsForCall = append(fake.buildStagingResponseArgsForCall, struct {
 		arg1 receptor.TaskResponse
@@ -197,25 +197,25 @@ func (fake *FakeBackend) BuildStagingResponseArgsForCall(i int) receptor.TaskRes
 	return fake.buildStagingResponseArgsForCall[i].arg1
 }
 
-func (fake *FakeBackend) BuildStagingResponseReturns(result1 []byte, result2 error) {
+func (fake *FakeBackend) BuildStagingResponseReturns(result1 cc_messages.StagingResponseForCC, result2 error) {
 	fake.BuildStagingResponseStub = nil
 	fake.buildStagingResponseReturns = struct {
-		result1 []byte
+		result1 cc_messages.StagingResponseForCC
 		result2 error
 	}{result1, result2}
 }
 
-func (fake *FakeBackend) BuildStagingResponseFromRequestError(requestJson []byte, errorMessage string) ([]byte, error) {
+func (fake *FakeBackend) BuildStagingResponseFromRequestError(request cc_messages.StagingRequestFromCC, errorMessage string) cc_messages.StagingResponseForCC {
 	fake.buildStagingResponseFromRequestErrorMutex.Lock()
 	fake.buildStagingResponseFromRequestErrorArgsForCall = append(fake.buildStagingResponseFromRequestErrorArgsForCall, struct {
-		requestJson  []byte
+		request      cc_messages.StagingRequestFromCC
 		errorMessage string
-	}{requestJson, errorMessage})
+	}{request, errorMessage})
 	fake.buildStagingResponseFromRequestErrorMutex.Unlock()
 	if fake.BuildStagingResponseFromRequestErrorStub != nil {
-		return fake.BuildStagingResponseFromRequestErrorStub(requestJson, errorMessage)
+		return fake.BuildStagingResponseFromRequestErrorStub(request, errorMessage)
 	} else {
-		return fake.buildStagingResponseFromRequestErrorReturns.result1, fake.buildStagingResponseFromRequestErrorReturns.result2
+		return fake.buildStagingResponseFromRequestErrorReturns.result1
 	}
 }
 
@@ -225,28 +225,27 @@ func (fake *FakeBackend) BuildStagingResponseFromRequestErrorCallCount() int {
 	return len(fake.buildStagingResponseFromRequestErrorArgsForCall)
 }
 
-func (fake *FakeBackend) BuildStagingResponseFromRequestErrorArgsForCall(i int) ([]byte, string) {
+func (fake *FakeBackend) BuildStagingResponseFromRequestErrorArgsForCall(i int) (cc_messages.StagingRequestFromCC, string) {
 	fake.buildStagingResponseFromRequestErrorMutex.RLock()
 	defer fake.buildStagingResponseFromRequestErrorMutex.RUnlock()
-	return fake.buildStagingResponseFromRequestErrorArgsForCall[i].requestJson, fake.buildStagingResponseFromRequestErrorArgsForCall[i].errorMessage
+	return fake.buildStagingResponseFromRequestErrorArgsForCall[i].request, fake.buildStagingResponseFromRequestErrorArgsForCall[i].errorMessage
 }
 
-func (fake *FakeBackend) BuildStagingResponseFromRequestErrorReturns(result1 []byte, result2 error) {
+func (fake *FakeBackend) BuildStagingResponseFromRequestErrorReturns(result1 cc_messages.StagingResponseForCC) {
 	fake.BuildStagingResponseFromRequestErrorStub = nil
 	fake.buildStagingResponseFromRequestErrorReturns = struct {
-		result1 []byte
-		result2 error
-	}{result1, result2}
+		result1 cc_messages.StagingResponseForCC
+	}{result1}
 }
 
-func (fake *FakeBackend) StagingTaskGuid(requestJson []byte) (string, error) {
+func (fake *FakeBackend) StagingTaskGuid(request cc_messages.StopStagingRequestFromCC) (string, error) {
 	fake.stagingTaskGuidMutex.Lock()
 	fake.stagingTaskGuidArgsForCall = append(fake.stagingTaskGuidArgsForCall, struct {
-		requestJson []byte
-	}{requestJson})
+		request cc_messages.StopStagingRequestFromCC
+	}{request})
 	fake.stagingTaskGuidMutex.Unlock()
 	if fake.StagingTaskGuidStub != nil {
-		return fake.StagingTaskGuidStub(requestJson)
+		return fake.StagingTaskGuidStub(request)
 	} else {
 		return fake.stagingTaskGuidReturns.result1, fake.stagingTaskGuidReturns.result2
 	}
@@ -258,10 +257,10 @@ func (fake *FakeBackend) StagingTaskGuidCallCount() int {
 	return len(fake.stagingTaskGuidArgsForCall)
 }
 
-func (fake *FakeBackend) StagingTaskGuidArgsForCall(i int) []byte {
+func (fake *FakeBackend) StagingTaskGuidArgsForCall(i int) cc_messages.StopStagingRequestFromCC {
 	fake.stagingTaskGuidMutex.RLock()
 	defer fake.stagingTaskGuidMutex.RUnlock()
-	return fake.stagingTaskGuidArgsForCall[i].requestJson
+	return fake.stagingTaskGuidArgsForCall[i].request
 }
 
 func (fake *FakeBackend) StagingTaskGuidReturns(result1 string, result2 error) {

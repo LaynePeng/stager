@@ -26,11 +26,11 @@ type Backend interface {
 	StopStagingRequestsReceivedCounter() metric.Counter
 	TaskDomain() string
 
-	BuildRecipe(requestJson []byte) (receptor.TaskCreateRequest, error)
-	BuildStagingResponse(receptor.TaskResponse) ([]byte, error)
-	BuildStagingResponseFromRequestError(requestJson []byte, errorMessage string) ([]byte, error)
+	BuildRecipe(request cc_messages.StagingRequestFromCC) (receptor.TaskCreateRequest, error)
+	BuildStagingResponse(receptor.TaskResponse) (cc_messages.StagingResponseForCC, error)
+	BuildStagingResponseFromRequestError(request cc_messages.StagingRequestFromCC, errorMessage string) cc_messages.StagingResponseForCC
 
-	StagingTaskGuid(requestJson []byte) (string, error)
+	StagingTaskGuid(request cc_messages.StopStagingRequestFromCC) (string, error)
 }
 
 var ErrNoCompilerDefined = errors.New(diego_errors.NO_COMPILER_DEFINED_MESSAGE)

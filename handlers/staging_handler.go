@@ -62,13 +62,23 @@ func (handler *stagingHandler) Stage(resp http.ResponseWriter, req *http.Request
 		return
 	}
 
+	if stagingRequest.AppId == "" {
+		resp.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if stagingRequest.TaskId == "" {
+		resp.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
 	resp.WriteHeader(http.StatusAccepted)
 	backend.StagingRequestsReceivedCounter().Increment()
 
-	taskRequest, err := backend.BuildRecipe(requestBody)
+	taskRequest, err := backend.BuildRecipe(stagingRequest)
 	if err != nil {
 		logger.Error("recipe-building-failed", err, lager.Data{"staging-request": stagingRequest})
-		handler.sendStagingCompleteError(logger, backend, "Recipe building failed: ", err, requestBody)
+		handler.sendStagingCompleteError(logger, backend, "Recipe building failed: ", err, stagingRequest)
 		return
 	}
 
@@ -85,7 +95,7 @@ func (handler *stagingHandler) Stage(resp http.ResponseWriter, req *http.Request
 
 	if err != nil {
 		logger.Error("staging-failed", err, lager.Data{"staging-request": stagingRequest})
-		handler.sendStagingCompleteError(logger, backend, "Staging failed: ", err, requestBody)
+		handler.sendStagingCompleteError(logger, backend, "Staging failed: ", err, stagingRequest)
 	}
 }
 
@@ -114,7 +124,7 @@ func (handler *stagingHandler) StopStaging(resp http.ResponseWriter, req *http.R
 	resp.WriteHeader(http.StatusAccepted)
 	backend.StopStagingRequestsReceivedCounter().Increment()
 
-	taskGuid, err := backend.StagingTaskGuid(requestBody)
+	taskGuid, err := backend.StagingTaskGuid(stopStagingRequest)
 	if err != nil {
 		logger.Error("staging-task-guid-failed", err, lager.Data{"stop-staging-request": requestBody})
 		return
@@ -128,9 +138,13 @@ func (handler *stagingHandler) StopStaging(resp http.ResponseWriter, req *http.R
 	}
 }
 
-func (handler *stagingHandler) sendStagingCompleteError(logger lager.Logger, backend backend.Backend, messagePrefix string, err error, requestJson []byte) {
-	responseJson, err := backend.BuildStagingResponseFromRequestError(requestJson, messagePrefix+err.Error())
-	if err == nil {
-		handler.ccClient.StagingComplete(responseJson, logger)
+func (handler *stagingHandler) sendStagingCompleteError(logger lager.Logger, backend backend.Backend, messagePrefix string, err error, stagingRequest cc_messages.StagingRequestFromCC) {
+	response := backend.BuildStagingResponseFromRequestError(stagingRequest, messagePrefix+err.Error())
+	responseJson, err := json.Marshal(response)
+	if err != nil {
+		logger.Error("marshalling-build-staging-response-failed", err)
+		return
 	}
+
+	handler.ccClient.StagingComplete(responseJson, logger)
 }

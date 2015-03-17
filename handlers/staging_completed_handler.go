@@ -2,10 +2,12 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/cloudfoundry-incubator/receptor"
+	"github.com/cloudfoundry-incubator/runtime-schema/cc_messages"
 	"github.com/cloudfoundry-incubator/runtime-schema/metric"
 	"github.com/cloudfoundry-incubator/stager/backend"
 	"github.com/cloudfoundry-incubator/stager/cc_client"
@@ -54,7 +56,19 @@ func (handler *completionHandler) StagingComplete(res http.ResponseWriter, req *
 		"guid": task.TaskGuid,
 	})
 
-	responseJson, err := handler.stagingResponse(task)
+	response, err := handler.stagingResponse(task)
+	if response == nil {
+		res.WriteHeader(http.StatusNotFound)
+		logger.Error("get-staging-response-failed-backend-not-found", err)
+		return
+	}
+	if err != nil {
+		res.WriteHeader(http.StatusBadRequest)
+		logger.Error("get-staging-response-failed", err)
+		return
+	}
+
+	responseJson, err := json.Marshal(response)
 	if err != nil {
 		res.WriteHeader(http.StatusBadRequest)
 		logger.Error("get-staging-response-failed", err)
@@ -99,12 +113,16 @@ func (handler *completionHandler) reportMetrics(task receptor.TaskResponse) {
 	}
 }
 
-func (handler *completionHandler) stagingResponse(task receptor.TaskResponse) ([]byte, error) {
+func (handler *completionHandler) stagingResponse(task receptor.TaskResponse) (*cc_messages.StagingResponseForCC, error) {
 	for _, backend := range handler.backends {
 		if backend.TaskDomain() == task.Domain {
-			return backend.BuildStagingResponse(task)
+			response, err := backend.BuildStagingResponse(task)
+			if err != nil {
+				response = cc_messages.StagingResponseForCC{}
+			}
+			return &response, err
 		}
 	}
 
-	return nil, nil
+	return nil, fmt.Errorf("No handler for domain: %q", task.Domain)
 }

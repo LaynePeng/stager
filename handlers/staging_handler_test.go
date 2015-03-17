@@ -73,9 +73,69 @@ var _ = Describe("StagingHandler", func() {
 			handler.Stage(responseRecorder, req)
 		})
 
+		Describe("bad requests", func() {
+			Context("when the request fails to unmarshal", func() {
+				BeforeEach(func() {
+					stagingRequestJson = []byte(`bad-json`)
+				})
+
+				It("returns bad request", func() {
+					Ω(responseRecorder.Code).Should(Equal(http.StatusBadRequest))
+				})
+
+				It("does not send a staging complete message", func() {
+					Ω(fakeCcClient.StagingCompleteCallCount()).To(Equal(0))
+				})
+			})
+
+			Context("when the app id is missing", func() {
+				BeforeEach(func() {
+					stagingRequest := cc_messages.StagingRequestFromCC{
+						TaskId:    "mytask",
+						Lifecycle: "fake-backend",
+					}
+
+					var err error
+					stagingRequestJson, err = json.Marshal(stagingRequest)
+					Ω(err).ShouldNot(HaveOccurred())
+				})
+
+				It("returns bad request", func() {
+					Ω(responseRecorder.Code).Should(Equal(http.StatusBadRequest))
+				})
+
+				It("does not send a staging complete message", func() {
+					Ω(fakeCcClient.StagingCompleteCallCount()).To(Equal(0))
+				})
+			})
+
+			Context("when the task id is missing", func() {
+				BeforeEach(func() {
+					stagingRequest := cc_messages.StagingRequestFromCC{
+						AppId:     "myapp",
+						Lifecycle: "fake-backend",
+					}
+
+					var err error
+					stagingRequestJson, err = json.Marshal(stagingRequest)
+					Ω(err).ShouldNot(HaveOccurred())
+				})
+
+				It("returns bad request", func() {
+					Ω(responseRecorder.Code).Should(Equal(http.StatusBadRequest))
+				})
+
+				It("does not send a staging complete message", func() {
+					Ω(fakeCcClient.StagingCompleteCallCount()).To(Equal(0))
+				})
+			})
+		})
+
 		Context("when a staging request is received for a registered backend", func() {
+			var stagingRequest cc_messages.StagingRequestFromCC
+
 			BeforeEach(func() {
-				stagingRequest := cc_messages.StagingRequestFromCC{
+				stagingRequest = cc_messages.StagingRequestFromCC{
 					AppId:     "myapp",
 					TaskId:    "mytask",
 					Lifecycle: "fake-backend",
@@ -96,7 +156,7 @@ var _ = Describe("StagingHandler", func() {
 
 			It("builds a staging recipe", func() {
 				Ω(fakeBackend.BuildRecipeCallCount()).To(Equal(1))
-				Ω(fakeBackend.BuildRecipeArgsForCall(0)).To(Equal(stagingRequestJson))
+				Ω(fakeBackend.BuildRecipeArgsForCall(0)).To(Equal(stagingRequest))
 			})
 
 			Context("when the recipe was built successfully", func() {
@@ -160,9 +220,7 @@ var _ = Describe("StagingHandler", func() {
 				Context("when the response builder succeeds", func() {
 					BeforeEach(func() {
 						responseForCC := cc_messages.StagingResponseForCC{Error: &cc_messages.StagingError{Message: "some fake error"}}
-						responseForCCjson, err := json.Marshal(responseForCC)
-						Ω(err).ShouldNot(HaveOccurred())
-						fakeBackend.BuildStagingResponseFromRequestErrorReturns(responseForCCjson, nil)
+						fakeBackend.BuildStagingResponseFromRequestErrorReturns(responseForCC)
 					})
 
 					It("sends a staging failure response", func() {
@@ -172,16 +230,6 @@ var _ = Describe("StagingHandler", func() {
 						stagingResponse := cc_messages.StagingResponseForCC{}
 						json.Unmarshal(response, &stagingResponse)
 						Ω(stagingResponse.Error).Should(Equal(&cc_messages.StagingError{Message: "some fake error"}))
-					})
-				})
-
-				Context("when the response builder fails", func() {
-					BeforeEach(func() {
-						fakeBackend.BuildStagingResponseFromRequestErrorReturns(nil, errors.New("builder error"))
-					})
-
-					It("does not send a message in response", func() {
-						Ω(fakeCcClient.StagingCompleteCallCount()).To(Equal(0))
 					})
 				})
 			})
@@ -228,9 +276,71 @@ var _ = Describe("StagingHandler", func() {
 			handler.StopStaging(responseRecorder, req)
 		})
 
+		Describe("bad requests", func() {
+			var stagingRequestJson []byte
+
+			Context("when the request fails to unmarshal", func() {
+				BeforeEach(func() {
+					stagingRequestJson = []byte(`bad-json`)
+				})
+
+				It("returns bad request", func() {
+					Ω(responseRecorder.Code).Should(Equal(http.StatusBadRequest))
+				})
+
+				It("does not send a staging complete message", func() {
+					Ω(fakeCcClient.StagingCompleteCallCount()).To(Equal(0))
+				})
+			})
+
+			Context("when the app id is missing", func() {
+				BeforeEach(func() {
+					stagingRequest := cc_messages.StagingRequestFromCC{
+						TaskId:    "mytask",
+						Lifecycle: "fake-backend",
+					}
+
+					var err error
+					stagingRequestJson, err = json.Marshal(stagingRequest)
+					Ω(err).ShouldNot(HaveOccurred())
+				})
+
+				It("returns bad request", func() {
+					Ω(responseRecorder.Code).Should(Equal(http.StatusBadRequest))
+				})
+
+				It("does not send a staging complete message", func() {
+					Ω(fakeCcClient.StagingCompleteCallCount()).To(Equal(0))
+				})
+			})
+
+			Context("when the task id is missing", func() {
+				BeforeEach(func() {
+					stagingRequest := cc_messages.StagingRequestFromCC{
+						AppId:     "myapp",
+						Lifecycle: "fake-backend",
+					}
+
+					var err error
+					stagingRequestJson, err = json.Marshal(stagingRequest)
+					Ω(err).ShouldNot(HaveOccurred())
+				})
+
+				It("returns bad request", func() {
+					Ω(responseRecorder.Code).Should(Equal(http.StatusBadRequest))
+				})
+
+				It("does not send a staging complete message", func() {
+					Ω(fakeCcClient.StagingCompleteCallCount()).To(Equal(0))
+				})
+			})
+		})
+
 		Context("when receiving a stop staging request for a registered backend", func() {
+			var stopStagingRequest cc_messages.StopStagingRequestFromCC
+
 			BeforeEach(func() {
-				stopStagingRequest := cc_messages.StopStagingRequestFromCC{
+				stopStagingRequest = cc_messages.StopStagingRequestFromCC{
 					AppId:     "myapp",
 					TaskId:    "mytask",
 					Lifecycle: "fake-backend",
@@ -251,7 +361,7 @@ var _ = Describe("StagingHandler", func() {
 
 			It("builds a stop staging recipe", func() {
 				Ω(fakeBackend.StagingTaskGuidCallCount()).To(Equal(1))
-				Ω(fakeBackend.StagingTaskGuidArgsForCall(0)).To(Equal(stopStagingRequestJson))
+				Ω(fakeBackend.StagingTaskGuidArgsForCall(0)).To(Equal(stopStagingRequest))
 			})
 
 			Context("when the task guid was built successfully", func() {

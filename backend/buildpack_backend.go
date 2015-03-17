@@ -53,14 +53,8 @@ func (backend *traditionalBackend) TaskDomain() string {
 	return TraditionalTaskDomain
 }
 
-func (backend *traditionalBackend) BuildRecipe(requestJson []byte) (receptor.TaskCreateRequest, error) {
+func (backend *traditionalBackend) BuildRecipe(request cc_messages.StagingRequestFromCC) (receptor.TaskCreateRequest, error) {
 	logger := backend.logger.Session("build-recipe")
-
-	var request cc_messages.StagingRequestFromCC
-	err := json.Unmarshal(requestJson, &request)
-	if err != nil {
-		return receptor.TaskCreateRequest{}, err
-	}
 	logger.Info("staging-request", lager.Data{"Request": request})
 
 	if request.LifecycleData == nil {
@@ -68,7 +62,7 @@ func (backend *traditionalBackend) BuildRecipe(requestJson []byte) (receptor.Tas
 	}
 
 	var lifecycleData cc_messages.BuildpackStagingData
-	err = json.Unmarshal(*request.LifecycleData, &lifecycleData)
+	err := json.Unmarshal(*request.LifecycleData, &lifecycleData)
 	if err != nil {
 		return receptor.TaskCreateRequest{}, err
 	}
@@ -257,30 +251,21 @@ func (backend *traditionalBackend) BuildRecipe(requestJson []byte) (receptor.Tas
 	return task, nil
 }
 
-func (backend *traditionalBackend) BuildStagingResponseFromRequestError(requestJson []byte, errorMessage string) ([]byte, error) {
-	request := cc_messages.StagingRequestFromCC{}
-
-	err := json.Unmarshal(requestJson, &request)
-	if err != nil {
-		return nil, err
-	}
-
-	response := cc_messages.StagingResponseForCC{
+func (backend *traditionalBackend) BuildStagingResponseFromRequestError(request cc_messages.StagingRequestFromCC, errorMessage string) cc_messages.StagingResponseForCC {
+	return cc_messages.StagingResponseForCC{
 		AppId:  request.AppId,
 		TaskId: request.TaskId,
 		Error:  backend.config.Sanitizer(errorMessage),
 	}
-
-	return json.Marshal(response)
 }
 
-func (backend *traditionalBackend) BuildStagingResponse(taskResponse receptor.TaskResponse) ([]byte, error) {
+func (backend *traditionalBackend) BuildStagingResponse(taskResponse receptor.TaskResponse) (cc_messages.StagingResponseForCC, error) {
 	var response cc_messages.StagingResponseForCC
 
 	var annotation models.StagingTaskAnnotation
 	err := json.Unmarshal([]byte(taskResponse.Annotation), &annotation)
 	if err != nil {
-		return nil, err
+		return cc_messages.StagingResponseForCC{}, err
 	}
 
 	response.AppId = annotation.AppId
@@ -292,7 +277,7 @@ func (backend *traditionalBackend) BuildStagingResponse(taskResponse receptor.Ta
 		var result buildpack_app_lifecycle.StagingResult
 		err := json.Unmarshal([]byte(taskResponse.Result), &result)
 		if err != nil {
-			return nil, err
+			return cc_messages.StagingResponseForCC{}, err
 		}
 
 		buildpackResponse := cc_messages.BuildpackStagingResponse{
@@ -302,7 +287,7 @@ func (backend *traditionalBackend) BuildStagingResponse(taskResponse receptor.Ta
 
 		lifecycleDataJSON, err := json.Marshal(buildpackResponse)
 		if err != nil {
-			return nil, err
+			return cc_messages.StagingResponseForCC{}, err
 		}
 		lifecycleData := json.RawMessage(lifecycleDataJSON)
 
@@ -311,16 +296,10 @@ func (backend *traditionalBackend) BuildStagingResponse(taskResponse receptor.Ta
 		response.LifecycleData = &lifecycleData
 	}
 
-	return json.Marshal(response)
+	return response, nil
 }
 
-func (backend *traditionalBackend) StagingTaskGuid(requestJson []byte) (string, error) {
-	var request cc_messages.StopStagingRequestFromCC
-	err := json.Unmarshal(requestJson, &request)
-	if err != nil {
-		return "", err
-	}
-
+func (backend *traditionalBackend) StagingTaskGuid(request cc_messages.StopStagingRequestFromCC) (string, error) {
 	if request.AppId == "" {
 		return "", ErrMissingAppId
 	}

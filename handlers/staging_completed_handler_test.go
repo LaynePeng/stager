@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cloudfoundry-incubator/receptor"
+	"github.com/cloudfoundry-incubator/runtime-schema/cc_messages"
 	"github.com/cloudfoundry-incubator/runtime-schema/models"
 	"github.com/cloudfoundry-incubator/stager"
 	"github.com/cloudfoundry-incubator/stager/backend"
@@ -34,7 +35,7 @@ var _ = Describe("StagingCompletedHandler", func() {
 
 		fakeCCClient        *fakes.FakeCcClient
 		fakeBackend         *fake_backend.FakeBackend
-		backendResponse     []byte
+		backendResponse     cc_messages.StagingResponseForCC
 		backendError        error
 		fakeClock           *fakeclock.FakeClock
 		metricSender        *fake.FakeMetricSender
@@ -58,7 +59,6 @@ var _ = Describe("StagingCompletedHandler", func() {
 		fakeCCClient = &fakes.FakeCcClient{}
 		fakeBackend = &fake_backend.FakeBackend{}
 		fakeBackend.TaskDomainReturns("fake-domain")
-		backendResponse = []byte("fake-response")
 		backendError = nil
 
 		fakeClock = fakeclock.NewFakeClock(time.Now())
@@ -128,14 +128,23 @@ var _ = Describe("StagingCompletedHandler", func() {
 		})
 
 		Context("when the response builder does not return an error", func() {
+			var backendResponseJson []byte
+
 			BeforeEach(func() {
-				backendResponse = []byte("fake-response")
+				backendResponse = cc_messages.StagingResponseForCC{
+					AppId:  "the-app-id",
+					TaskId: "the-task-id",
+				}
+
+				var err error
+				backendResponseJson, err = json.Marshal(backendResponse)
+				Ω(err).ShouldNot(HaveOccurred())
 			})
 
 			It("posts the response builder's result to CC", func() {
 				Ω(fakeCCClient.StagingCompleteCallCount()).Should(Equal(1))
 				payload, _ := fakeCCClient.StagingCompleteArgsForCall(0)
-				Ω(payload).Should(Equal([]byte("fake-response")))
+				Ω(payload).Should(Equal(backendResponseJson))
 			})
 
 			Context("when the CC request succeeds", func() {
@@ -186,8 +195,17 @@ var _ = Describe("StagingCompletedHandler", func() {
 	})
 
 	Context("when a staging task fails", func() {
+		var backendResponseJson []byte
+
 		BeforeEach(func() {
-			backendResponse = []byte("fake-response")
+			backendResponse = cc_messages.StagingResponseForCC{
+				AppId:  "the-app-id",
+				TaskId: "the-task-id",
+			}
+
+			var err error
+			backendResponseJson, err = json.Marshal(backendResponse)
+			Ω(err).ShouldNot(HaveOccurred())
 		})
 
 		JustBeforeEach(func() {
@@ -215,7 +233,7 @@ var _ = Describe("StagingCompletedHandler", func() {
 		It("posts the result to CC as an error", func() {
 			Ω(fakeCCClient.StagingCompleteCallCount()).Should(Equal(1))
 			payload, _ := fakeCCClient.StagingCompleteArgsForCall(0)
-			Ω(payload).Should(Equal([]byte("fake-response")))
+			Ω(payload).Should(Equal(backendResponseJson))
 		})
 
 		It("responds with a 200", func() {
