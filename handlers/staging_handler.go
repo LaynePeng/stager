@@ -111,24 +111,34 @@ func (handler *stagingHandler) StopStaging(resp http.ResponseWriter, req *http.R
 	var stopStagingRequest cc_messages.StopStagingRequestFromCC
 	err = json.Unmarshal(requestBody, &stopStagingRequest)
 	if err != nil {
+		logger.Error("unmarshal-request-failed", err)
 		resp.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	backend, ok := handler.backends[stopStagingRequest.Lifecycle]
-	if !ok {
+	lifecycleBackend, found := handler.backends[stopStagingRequest.Lifecycle]
+	if !found {
+		logger.Error("backend-not-found", nil, lager.Data{"backend": stopStagingRequest.Lifecycle})
 		resp.WriteHeader(http.StatusNotFound)
 		return
 	}
 
-	resp.WriteHeader(http.StatusAccepted)
-	backend.StopStagingRequestsReceivedCounter().Increment()
-
-	taskGuid, err := backend.StagingTaskGuid(stopStagingRequest)
-	if err != nil {
-		logger.Error("staging-task-guid-failed", err, lager.Data{"stop-staging-request": requestBody})
+	if stopStagingRequest.AppId == "" {
+		logger.Error("missing-app-id", nil)
+		resp.WriteHeader(http.StatusBadRequest)
 		return
 	}
+
+	if stopStagingRequest.TaskId == "" {
+		logger.Error("missing-task-id", nil)
+		resp.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	resp.WriteHeader(http.StatusAccepted)
+	lifecycleBackend.StopStagingRequestsReceivedCounter().Increment()
+
+	taskGuid := backend.StagingTaskGuid(stopStagingRequest.AppId, stopStagingRequest.TaskId)
 
 	logger.Info("cancelling", lager.Data{"task_guid": taskGuid})
 

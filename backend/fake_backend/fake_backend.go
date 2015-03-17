@@ -56,15 +56,6 @@ type FakeBackend struct {
 	buildStagingResponseFromRequestErrorReturns struct {
 		result1 cc_messages.StagingResponseForCC
 	}
-	StagingTaskGuidStub        func(request cc_messages.StopStagingRequestFromCC) (string, error)
-	stagingTaskGuidMutex       sync.RWMutex
-	stagingTaskGuidArgsForCall []struct {
-		request cc_messages.StopStagingRequestFromCC
-	}
-	stagingTaskGuidReturns struct {
-		result1 string
-		result2 error
-	}
 }
 
 func (fake *FakeBackend) StagingRequestsReceivedCounter() metric.Counter {
@@ -236,39 +227,6 @@ func (fake *FakeBackend) BuildStagingResponseFromRequestErrorReturns(result1 cc_
 	fake.buildStagingResponseFromRequestErrorReturns = struct {
 		result1 cc_messages.StagingResponseForCC
 	}{result1}
-}
-
-func (fake *FakeBackend) StagingTaskGuid(request cc_messages.StopStagingRequestFromCC) (string, error) {
-	fake.stagingTaskGuidMutex.Lock()
-	fake.stagingTaskGuidArgsForCall = append(fake.stagingTaskGuidArgsForCall, struct {
-		request cc_messages.StopStagingRequestFromCC
-	}{request})
-	fake.stagingTaskGuidMutex.Unlock()
-	if fake.StagingTaskGuidStub != nil {
-		return fake.StagingTaskGuidStub(request)
-	} else {
-		return fake.stagingTaskGuidReturns.result1, fake.stagingTaskGuidReturns.result2
-	}
-}
-
-func (fake *FakeBackend) StagingTaskGuidCallCount() int {
-	fake.stagingTaskGuidMutex.RLock()
-	defer fake.stagingTaskGuidMutex.RUnlock()
-	return len(fake.stagingTaskGuidArgsForCall)
-}
-
-func (fake *FakeBackend) StagingTaskGuidArgsForCall(i int) cc_messages.StopStagingRequestFromCC {
-	fake.stagingTaskGuidMutex.RLock()
-	defer fake.stagingTaskGuidMutex.RUnlock()
-	return fake.stagingTaskGuidArgsForCall[i].request
-}
-
-func (fake *FakeBackend) StagingTaskGuidReturns(result1 string, result2 error) {
-	fake.StagingTaskGuidStub = nil
-	fake.stagingTaskGuidReturns = struct {
-		result1 string
-		result2 error
-	}{result1, result2}
 }
 
 var _ backend.Backend = new(FakeBackend)

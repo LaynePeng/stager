@@ -29,8 +29,6 @@ type Backend interface {
 	BuildRecipe(request cc_messages.StagingRequestFromCC) (receptor.TaskCreateRequest, error)
 	BuildStagingResponse(receptor.TaskResponse) (cc_messages.StagingResponseForCC, error)
 	BuildStagingResponseFromRequestError(request cc_messages.StagingRequestFromCC, errorMessage string) cc_messages.StagingResponseForCC
-
-	StagingTaskGuid(request cc_messages.StopStagingRequestFromCC) (string, error)
 }
 
 var ErrNoCompilerDefined = errors.New(diego_errors.NO_COMPILER_DEFINED_MESSAGE)
@@ -55,7 +53,7 @@ func max(x, y uint64) uint64 {
 	}
 }
 
-func stagingTaskGuid(appId, taskId string) string {
+func StagingTaskGuid(appId, taskId string) string {
 	return fmt.Sprintf("%s-%s", appId, taskId)
 }
 

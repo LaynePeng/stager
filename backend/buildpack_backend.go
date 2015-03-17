@@ -229,7 +229,7 @@ func (backend *traditionalBackend) BuildRecipe(request cc_messages.StagingReques
 	})
 
 	task := receptor.TaskCreateRequest{
-		TaskGuid:              backend.taskGuid(request),
+		TaskGuid:              StagingTaskGuid(request.AppId, request.TaskId),
 		Domain:                TraditionalTaskDomain,
 		Stack:                 request.Stack,
 		ResultFile:            builderConfig.OutputMetadata(),
@@ -297,22 +297,6 @@ func (backend *traditionalBackend) BuildStagingResponse(taskResponse receptor.Ta
 	}
 
 	return response, nil
-}
-
-func (backend *traditionalBackend) StagingTaskGuid(request cc_messages.StopStagingRequestFromCC) (string, error) {
-	if request.AppId == "" {
-		return "", ErrMissingAppId
-	}
-
-	if request.TaskId == "" {
-		return "", ErrMissingTaskId
-	}
-
-	return stagingTaskGuid(request.AppId, request.TaskId), nil
-}
-
-func (backend *traditionalBackend) taskGuid(request cc_messages.StagingRequestFromCC) string {
-	return stagingTaskGuid(request.AppId, request.TaskId)
 }
 
 func (backend *traditionalBackend) compilerDownloadURL(request cc_messages.StagingRequestFromCC) (*url.URL, error) {

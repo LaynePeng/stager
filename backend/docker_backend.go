@@ -116,7 +116,7 @@ func (backend *dockerBackend) BuildRecipe(request cc_messages.StagingRequestFrom
 
 	task := receptor.TaskCreateRequest{
 		ResultFile:            DockerBuilderOutputPath,
-		TaskGuid:              backend.taskGuid(request),
+		TaskGuid:              StagingTaskGuid(request.AppId, request.TaskId),
 		Domain:                DockerTaskDomain,
 		Stack:                 request.Stack,
 		MemoryMB:              request.MemoryMB,
@@ -171,18 +171,6 @@ func (backend *dockerBackend) BuildStagingResponse(taskResponse receptor.TaskRes
 	return response, nil
 }
 
-func (backend *dockerBackend) StagingTaskGuid(request cc_messages.StopStagingRequestFromCC) (string, error) {
-	if request.AppId == "" {
-		return "", ErrMissingAppId
-	}
-
-	if request.TaskId == "" {
-		return "", ErrMissingTaskId
-	}
-
-	return stagingTaskGuid(request.AppId, request.TaskId), nil
-}
-
 func (backend *dockerBackend) compilerDownloadURL() (*url.URL, error) {
 	lifecycleFilename := backend.config.Lifecycles["docker"]
 	if lifecycleFilename == "" {
@@ -216,10 +204,6 @@ func (backend *dockerBackend) compilerDownloadURL() (*url.URL, error) {
 	}
 
 	return url, nil
-}
-
-func (backend *dockerBackend) taskGuid(request cc_messages.StagingRequestFromCC) string {
-	return stagingTaskGuid(request.AppId, request.TaskId)
 }
 
 func (backend *dockerBackend) validateRequest(stagingRequest cc_messages.StagingRequestFromCC, dockerData cc_messages.DockerStagingData) error {

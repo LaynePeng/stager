@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 
@@ -71,64 +72,6 @@ var _ = Describe("StagingHandler", func() {
 			Ω(err).ShouldNot(HaveOccurred())
 
 			handler.Stage(responseRecorder, req)
-		})
-
-		Describe("bad requests", func() {
-			Context("when the request fails to unmarshal", func() {
-				BeforeEach(func() {
-					stagingRequestJson = []byte(`bad-json`)
-				})
-
-				It("returns bad request", func() {
-					Ω(responseRecorder.Code).Should(Equal(http.StatusBadRequest))
-				})
-
-				It("does not send a staging complete message", func() {
-					Ω(fakeCcClient.StagingCompleteCallCount()).To(Equal(0))
-				})
-			})
-
-			Context("when the app id is missing", func() {
-				BeforeEach(func() {
-					stagingRequest := cc_messages.StagingRequestFromCC{
-						TaskId:    "mytask",
-						Lifecycle: "fake-backend",
-					}
-
-					var err error
-					stagingRequestJson, err = json.Marshal(stagingRequest)
-					Ω(err).ShouldNot(HaveOccurred())
-				})
-
-				It("returns bad request", func() {
-					Ω(responseRecorder.Code).Should(Equal(http.StatusBadRequest))
-				})
-
-				It("does not send a staging complete message", func() {
-					Ω(fakeCcClient.StagingCompleteCallCount()).To(Equal(0))
-				})
-			})
-
-			Context("when the task id is missing", func() {
-				BeforeEach(func() {
-					stagingRequest := cc_messages.StagingRequestFromCC{
-						AppId:     "myapp",
-						Lifecycle: "fake-backend",
-					}
-
-					var err error
-					stagingRequestJson, err = json.Marshal(stagingRequest)
-					Ω(err).ShouldNot(HaveOccurred())
-				})
-
-				It("returns bad request", func() {
-					Ω(responseRecorder.Code).Should(Equal(http.StatusBadRequest))
-				})
-
-				It("does not send a staging complete message", func() {
-					Ω(fakeCcClient.StagingCompleteCallCount()).To(Equal(0))
-				})
-			})
 		})
 
 		Context("when a staging request is received for a registered backend", func() {
@@ -235,50 +178,7 @@ var _ = Describe("StagingHandler", func() {
 			})
 		})
 
-		Context("when a staging request is received for an unknown backend", func() {
-			BeforeEach(func() {
-				stagingRequest := cc_messages.StagingRequestFromCC{
-					AppId:     "myapp",
-					TaskId:    "mytask",
-					Lifecycle: "unknown-backend",
-				}
-
-				var err error
-				stagingRequestJson, err = json.Marshal(stagingRequest)
-				Ω(err).ShouldNot(HaveOccurred())
-			})
-
-			It("returns a Not Found response", func() {
-				Ω(responseRecorder.Code).Should(Equal(http.StatusNotFound))
-			})
-		})
-
-		Context("when a malformed staging request is received", func() {
-			BeforeEach(func() {
-				stagingRequestJson = []byte(`bogus-request`)
-			})
-
-			It("returns a BadRequest error", func() {
-				Ω(responseRecorder.Code).Should(Equal(http.StatusBadRequest))
-			})
-		})
-	})
-
-	Describe("StopStaging", func() {
-		var (
-			stopStagingRequestJson []byte
-		)
-
-		JustBeforeEach(func() {
-			req, err := http.NewRequest("POST", stager.StopStagingRoute, bytes.NewReader(stopStagingRequestJson))
-			Ω(err).ShouldNot(HaveOccurred())
-
-			handler.StopStaging(responseRecorder, req)
-		})
-
 		Describe("bad requests", func() {
-			var stagingRequestJson []byte
-
 			Context("when the request fails to unmarshal", func() {
 				BeforeEach(func() {
 					stagingRequestJson = []byte(`bad-json`)
@@ -334,6 +234,45 @@ var _ = Describe("StagingHandler", func() {
 					Ω(fakeCcClient.StagingCompleteCallCount()).To(Equal(0))
 				})
 			})
+
+			Context("when a staging request is received for an unknown backend", func() {
+				BeforeEach(func() {
+					stagingRequest := cc_messages.StagingRequestFromCC{
+						AppId:     "myapp",
+						TaskId:    "mytask",
+						Lifecycle: "unknown-backend",
+					}
+
+					var err error
+					stagingRequestJson, err = json.Marshal(stagingRequest)
+					Ω(err).ShouldNot(HaveOccurred())
+				})
+
+				It("returns a Not Found response", func() {
+					Ω(responseRecorder.Code).Should(Equal(http.StatusNotFound))
+				})
+			})
+
+			Context("when a malformed staging request is received", func() {
+				BeforeEach(func() {
+					stagingRequestJson = []byte(`bogus-request`)
+				})
+
+				It("returns a BadRequest error", func() {
+					Ω(responseRecorder.Code).Should(Equal(http.StatusBadRequest))
+				})
+			})
+		})
+	})
+
+	Describe("StopStaging", func() {
+		var stopStagingRequestJson []byte
+
+		JustBeforeEach(func() {
+			req, err := http.NewRequest("POST", stager.StopStagingRoute, bytes.NewReader(stopStagingRequestJson))
+			Ω(err).ShouldNot(HaveOccurred())
+
+			handler.StopStaging(responseRecorder, req)
 		})
 
 		Context("when receiving a stop staging request for a registered backend", func() {
@@ -359,59 +298,103 @@ var _ = Describe("StagingHandler", func() {
 				Ω(responseRecorder.Code).Should(Equal(http.StatusAccepted))
 			})
 
-			It("builds a stop staging recipe", func() {
-				Ω(fakeBackend.StagingTaskGuidCallCount()).To(Equal(1))
-				Ω(fakeBackend.StagingTaskGuidArgsForCall(0)).To(Equal(stopStagingRequest))
-			})
-
 			Context("when the task guid was built successfully", func() {
-				var taskGuid = "task-guid"
+				var expectedTaskId string
+
 				BeforeEach(func() {
-					fakeBackend.StagingTaskGuidReturns(taskGuid, nil)
+					expectedTaskId = fmt.Sprintf("%s-%s", stopStagingRequest.AppId, stopStagingRequest.TaskId)
 				})
 
 				It("cancels a task on Diego", func() {
 					Ω(fakeDiegoClient.CancelTaskCallCount()).To(Equal(1))
-					Ω(fakeDiegoClient.CancelTaskArgsForCall(0)).To(Equal(taskGuid))
+					Ω(fakeDiegoClient.CancelTaskArgsForCall(0)).To(Equal(expectedTaskId))
 				})
 			})
+		})
 
-			Context("when the staging task guid fails to be built", func() {
+		Describe("bad requests", func() {
+			Context("when the request fails to unmarshal", func() {
 				BeforeEach(func() {
-					fakeBackend.StagingTaskGuidReturns("", errors.New("fake error"))
+					stopStagingRequestJson = []byte(`bad-json`)
 				})
 
-				It("logs the failure", func() {
-					Ω(logger).Should(gbytes.Say("staging-task-guid-failed"))
+				It("returns bad request", func() {
+					Ω(responseRecorder.Code).Should(Equal(http.StatusBadRequest))
+				})
+
+				It("does not send a staging complete message", func() {
+					Ω(fakeCcClient.StagingCompleteCallCount()).To(Equal(0))
 				})
 			})
-		})
 
-		Context("when a stop staging request is received for an unknown backend", func() {
-			BeforeEach(func() {
-				stagingRequest := cc_messages.StopStagingRequestFromCC{
-					AppId:     "myapp",
-					TaskId:    "mytask",
-					Lifecycle: "unknown-backend",
-				}
+			Context("when the app id is missing", func() {
+				BeforeEach(func() {
+					stopStagingRequest := cc_messages.StopStagingRequestFromCC{
+						TaskId:    "mytask",
+						Lifecycle: "fake-backend",
+					}
 
-				var err error
-				stopStagingRequestJson, err = json.Marshal(stagingRequest)
-				Ω(err).ShouldNot(HaveOccurred())
+					var err error
+					stopStagingRequestJson, err = json.Marshal(stopStagingRequest)
+					Ω(err).ShouldNot(HaveOccurred())
+				})
+
+				It("returns bad request", func() {
+					Ω(responseRecorder.Code).Should(Equal(http.StatusBadRequest))
+				})
+
+				It("does not send a staging complete message", func() {
+					Ω(fakeCcClient.StagingCompleteCallCount()).To(Equal(0))
+				})
 			})
 
-			It("returns a Not Found response", func() {
-				Ω(responseRecorder.Code).Should(Equal(http.StatusNotFound))
-			})
-		})
+			Context("when the task id is missing", func() {
+				BeforeEach(func() {
+					stopStagingRequest := cc_messages.StopStagingRequestFromCC{
+						AppId:     "myapp",
+						Lifecycle: "fake-backend",
+					}
 
-		Context("when a malformed stop staging request is received", func() {
-			BeforeEach(func() {
-				stopStagingRequestJson = []byte(`bogus-request`)
+					var err error
+					stopStagingRequestJson, err = json.Marshal(stopStagingRequest)
+					Ω(err).ShouldNot(HaveOccurred())
+				})
+
+				It("returns bad request", func() {
+					Ω(responseRecorder.Code).Should(Equal(http.StatusBadRequest))
+				})
+
+				It("does not send a staging complete message", func() {
+					Ω(fakeCcClient.StagingCompleteCallCount()).To(Equal(0))
+				})
 			})
 
-			It("returns a BadRequest error", func() {
-				Ω(responseRecorder.Code).Should(Equal(http.StatusBadRequest))
+			Context("when a stop staging request is received for an unknown backend", func() {
+				BeforeEach(func() {
+					stagingRequest := cc_messages.StopStagingRequestFromCC{
+						AppId:     "myapp",
+						TaskId:    "mytask",
+						Lifecycle: "unknown-backend",
+					}
+
+					var err error
+					stopStagingRequestJson, err = json.Marshal(stagingRequest)
+					Ω(err).ShouldNot(HaveOccurred())
+				})
+
+				It("returns a Not Found response", func() {
+					Ω(responseRecorder.Code).Should(Equal(http.StatusNotFound))
+				})
+			})
+
+			Context("when a malformed stop staging request is received", func() {
+				BeforeEach(func() {
+					stopStagingRequestJson = []byte(`bogus-request`)
+				})
+
+				It("returns a BadRequest error", func() {
+					Ω(responseRecorder.Code).Should(Equal(http.StatusBadRequest))
+				})
 			})
 		})
 	})
