@@ -43,6 +43,11 @@ func NewStagingCompletionHandler(logger lager.Logger, ccClient cc_client.CcClien
 }
 
 func (handler *completionHandler) StagingComplete(res http.ResponseWriter, req *http.Request) {
+	taskGuid := req.FormValue(":staging_guid")
+	logger := handler.logger.Session("task-complete-callback-received", lager.Data{
+		"guid": taskGuid,
+	})
+
 	var task receptor.TaskResponse
 	err := json.NewDecoder(req.Body).Decode(&task)
 	if err != nil {
@@ -51,9 +56,11 @@ func (handler *completionHandler) StagingComplete(res http.ResponseWriter, req *
 		return
 	}
 
-	logger := handler.logger.Session("task-complete-callback-received", lager.Data{
-		"guid": task.TaskGuid,
-	})
+	if taskGuid != task.TaskGuid {
+		handler.logger.Error("task-guid-mismatch", err, lager.Data{"body-task-guid": task.TaskGuid})
+		res.WriteHeader(http.StatusBadRequest)
+		return
+	}
 
 	var annotation cc_messages.StagingTaskAnnotation
 	err = json.Unmarshal([]byte(task.Annotation), &annotation)
@@ -94,7 +101,7 @@ func (handler *completionHandler) StagingComplete(res http.ResponseWriter, req *
 		"payload": responseJson,
 	})
 
-	err = handler.ccClient.StagingComplete(responseJson, logger)
+	err = handler.ccClient.StagingComplete(taskGuid, responseJson, logger)
 	if err != nil {
 		logger.Error("cc-staging-complete-failed", err)
 		if responseErr, ok := err.(*cc_client.BadResponseError); ok {

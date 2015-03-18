@@ -49,7 +49,7 @@ func (backend *traditionalBackend) StopStagingRequestsReceivedCounter() metric.C
 	return TraditionalStopStagingRequestsReceivedCounter
 }
 
-func (backend *traditionalBackend) BuildRecipe(request cc_messages.StagingRequestFromCC) (receptor.TaskCreateRequest, error) {
+func (backend *traditionalBackend) BuildRecipe(stagingGuid string, request cc_messages.StagingRequestFromCC) (receptor.TaskCreateRequest, error) {
 	logger := backend.logger.Session("build-recipe")
 	logger.Info("staging-request", lager.Data{"Request": request})
 
@@ -221,12 +221,10 @@ func (backend *traditionalBackend) BuildRecipe(request cc_messages.StagingReques
 
 	annotationJson, _ := json.Marshal(cc_messages.StagingTaskAnnotation{
 		Lifecycle: TraditionalLifecycleName,
-		AppId:     request.AppId,
-		TaskId:    request.TaskId,
 	})
 
 	task := receptor.TaskCreateRequest{
-		TaskGuid:              StagingTaskGuid(request.AppId, request.TaskId),
+		TaskGuid:              stagingGuid,
 		Domain:                backend.config.TaskDomain,
 		Stack:                 request.Stack,
 		ResultFile:            builderConfig.OutputMetadata(),
@@ -234,9 +232,9 @@ func (backend *traditionalBackend) BuildRecipe(request cc_messages.StagingReques
 		DiskMB:                request.DiskMB,
 		CPUWeight:             StagingTaskCpuWeight,
 		Action:                models.Timeout(models.Serial(actions...), timeout),
-		LogGuid:               request.AppId,
+		LogGuid:               request.LogGuid,
 		LogSource:             TaskLogSource,
-		CompletionCallbackURL: backend.config.CallbackURL,
+		CompletionCallbackURL: backend.config.CallbackURL(stagingGuid),
 		EgressRules:           request.EgressRules,
 		Annotation:            string(annotationJson),
 		Privileged:            true,
@@ -250,9 +248,7 @@ func (backend *traditionalBackend) BuildRecipe(request cc_messages.StagingReques
 
 func (backend *traditionalBackend) BuildStagingResponseFromRequestError(request cc_messages.StagingRequestFromCC, errorMessage string) cc_messages.StagingResponseForCC {
 	return cc_messages.StagingResponseForCC{
-		AppId:  request.AppId,
-		TaskId: request.TaskId,
-		Error:  backend.config.Sanitizer(errorMessage),
+		Error: backend.config.Sanitizer(errorMessage),
 	}
 }
 
@@ -264,9 +260,6 @@ func (backend *traditionalBackend) BuildStagingResponse(taskResponse receptor.Ta
 	if err != nil {
 		return cc_messages.StagingResponseForCC{}, err
 	}
-
-	response.AppId = annotation.AppId
-	response.TaskId = annotation.TaskId
 
 	if taskResponse.Failed {
 		response.Error = backend.config.Sanitizer(taskResponse.FailureReason)
@@ -394,10 +387,6 @@ func (backend *traditionalBackend) validateRequest(stagingRequest cc_messages.St
 		return ErrMissingAppId
 	}
 
-	if len(stagingRequest.TaskId) == 0 {
-		return ErrMissingTaskId
-	}
-
 	if len(buildpackData.AppBitsDownloadUri) == 0 {
 		return ErrMissingAppBitsDownloadUri
 	}
@@ -413,7 +402,6 @@ func traditionalTimeout(request cc_messages.StagingRequestFromCC, logger lager.L
 			"requested-timeout": request.Timeout,
 			"default-timeout":   DefaultStagingTimeout,
 			"app-id":            request.AppId,
-			"task-id":           request.TaskId,
 		})
 		return DefaultStagingTimeout
 	}

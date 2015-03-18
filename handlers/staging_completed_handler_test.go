@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -22,6 +23,7 @@ import (
 	"github.com/cloudfoundry/dropsonde/metrics"
 	"github.com/pivotal-golang/clock/fakeclock"
 	"github.com/pivotal-golang/lager"
+	"github.com/tedsuo/rata"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -41,8 +43,8 @@ var _ = Describe("StagingCompletedHandler", func() {
 		metricSender        *fake.FakeMetricSender
 		stagingDurationNano time.Duration
 
-		handler          handlers.CompletionHandler
 		responseRecorder *httptest.ResponseRecorder
+		rataHandler      http.Handler
 	)
 
 	BeforeEach(func() {
@@ -63,7 +65,20 @@ var _ = Describe("StagingCompletedHandler", func() {
 		fakeClock = fakeclock.NewFakeClock(time.Now())
 
 		responseRecorder = httptest.NewRecorder()
-		handler = handlers.NewStagingCompletionHandler(logger, fakeCCClient, map[string]backend.Backend{"fake": fakeBackend}, fakeClock)
+		handler := handlers.NewStagingCompletionHandler(logger, fakeCCClient, map[string]backend.Backend{"fake": fakeBackend}, fakeClock)
+
+		var routes rata.Routes
+		for _, r := range stager.Routes {
+			if r.Name == stager.StagingCompletedRoute {
+				routes = append(routes, r)
+			}
+		}
+
+		var err error
+		rataHandler, err = rata.NewRouter(routes, rata.Handlers{
+			stager.StagingCompletedRoute: http.HandlerFunc(handler.StagingComplete),
+		})
+		Ω(err).ShouldNot(HaveOccurred())
 	})
 
 	JustBeforeEach(func() {
@@ -74,7 +89,7 @@ var _ = Describe("StagingCompletedHandler", func() {
 		taskJSON, err := json.Marshal(task)
 		Ω(err).ShouldNot(HaveOccurred())
 
-		request, err := http.NewRequest("POST", stager.StagingCompletedRoute, bytes.NewReader(taskJSON))
+		request, err := http.NewRequest("POST", fmt.Sprintf("/v1/staging/%s/completed", task.TaskGuid), bytes.NewReader(taskJSON))
 		Ω(err).ShouldNot(HaveOccurred())
 
 		return request
@@ -88,8 +103,6 @@ var _ = Describe("StagingCompletedHandler", func() {
 			var err error
 			annotationJson, err = json.Marshal(cc_messages.StagingTaskAnnotation{
 				Lifecycle: "fake",
-				AppId:     appId,
-				TaskId:    taskId,
 			})
 			Ω(err).ShouldNot(HaveOccurred())
 		})
@@ -114,12 +127,28 @@ var _ = Describe("StagingCompletedHandler", func() {
 				Annotation: string(annotationJson),
 			}
 
-			handler.StagingComplete(responseRecorder, postTask(taskResponse))
+			rataHandler.ServeHTTP(responseRecorder, postTask(taskResponse))
 		})
 
 		It("passes the task response to the matching response builder", func() {
 			Eventually(fakeBackend.BuildStagingResponseCallCount()).Should(Equal(1))
 			Ω(fakeBackend.BuildStagingResponseArgsForCall(0)).Should(Equal(taskResponse))
+		})
+
+		Context("when the guid in the url does not match the task guid", func() {
+			BeforeEach(func() {
+				taskJSON, err := json.Marshal(taskResponse)
+				Ω(err).ShouldNot(HaveOccurred())
+
+				request, err := http.NewRequest("POST", "/v1/staging/an-invalid-guid/completed", bytes.NewReader(taskJSON))
+				Ω(err).ShouldNot(HaveOccurred())
+
+				rataHandler.ServeHTTP(responseRecorder, request)
+			})
+
+			It("returns StatusBadRequest", func() {
+				Ω(responseRecorder.Code).Should(Equal(http.StatusBadRequest))
+			})
 		})
 
 		Describe("staging task annotation", func() {
@@ -183,10 +212,7 @@ var _ = Describe("StagingCompletedHandler", func() {
 			var backendResponseJson []byte
 
 			BeforeEach(func() {
-				backendResponse = cc_messages.StagingResponseForCC{
-					AppId:  "the-app-id",
-					TaskId: "the-task-id",
-				}
+				backendResponse = cc_messages.StagingResponseForCC{}
 
 				var err error
 				backendResponseJson, err = json.Marshal(backendResponse)
@@ -195,7 +221,8 @@ var _ = Describe("StagingCompletedHandler", func() {
 
 			It("posts the response builder's result to CC", func() {
 				Ω(fakeCCClient.StagingCompleteCallCount()).Should(Equal(1))
-				payload, _ := fakeCCClient.StagingCompleteArgsForCall(0)
+				guid, payload, _ := fakeCCClient.StagingCompleteArgsForCall(0)
+				Ω(guid).Should(Equal("the-task-guid"))
 				Ω(payload).Should(Equal(backendResponseJson))
 			})
 
@@ -250,10 +277,7 @@ var _ = Describe("StagingCompletedHandler", func() {
 		var backendResponseJson []byte
 
 		BeforeEach(func() {
-			backendResponse = cc_messages.StagingResponseForCC{
-				AppId:  "the-app-id",
-				TaskId: "the-task-id",
-			}
+			backendResponse = cc_messages.StagingResponseForCC{}
 
 			var err error
 			backendResponseJson, err = json.Marshal(backendResponse)
@@ -265,6 +289,7 @@ var _ = Describe("StagingCompletedHandler", func() {
 			fakeClock.Increment(stagingDurationNano)
 
 			taskResponse := receptor.TaskResponse{
+				TaskGuid:      "the-task-guid",
 				Domain:        "fake-domain",
 				Failed:        true,
 				CreatedAt:     createdAt,
@@ -280,12 +305,13 @@ var _ = Describe("StagingCompletedHandler", func() {
 				Result: `{}`,
 			}
 
-			handler.StagingComplete(responseRecorder, postTask(taskResponse))
+			rataHandler.ServeHTTP(responseRecorder, postTask(taskResponse))
 		})
 
 		It("posts the result to CC as an error", func() {
 			Ω(fakeCCClient.StagingCompleteCallCount()).Should(Equal(1))
-			payload, _ := fakeCCClient.StagingCompleteArgsForCall(0)
+			guid, payload, _ := fakeCCClient.StagingCompleteArgsForCall(0)
+			Ω(guid).Should(Equal("the-task-guid"))
 			Ω(payload).Should(Equal(backendResponseJson))
 		})
 
@@ -319,7 +345,7 @@ var _ = Describe("StagingCompletedHandler", func() {
 				Result:        `{}`,
 			}
 
-			handler.StagingComplete(responseRecorder, postTask(taskResponse))
+			rataHandler.ServeHTTP(responseRecorder, postTask(taskResponse))
 		})
 
 		It("responds with a 404", func() {
@@ -329,10 +355,10 @@ var _ = Describe("StagingCompletedHandler", func() {
 
 	Context("when invalid JSON is posted instead of a task", func() {
 		JustBeforeEach(func() {
-			request, err := http.NewRequest("POST", stager.StagingCompletedRoute, strings.NewReader("{"))
+			request, err := http.NewRequest("POST", "/v1/staging/an-invalid-guid/completed", strings.NewReader("{"))
 			Ω(err).ShouldNot(HaveOccurred())
 
-			handler.StagingComplete(responseRecorder, request)
+			rataHandler.ServeHTTP(responseRecorder, request)
 		})
 
 		It("responds with a 400", func() {

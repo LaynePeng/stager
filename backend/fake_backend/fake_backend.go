@@ -23,16 +23,11 @@ type FakeBackend struct {
 	stopStagingRequestsReceivedCounterReturns struct {
 		result1 metric.Counter
 	}
-	TaskDomainStub        func() string
-	taskDomainMutex       sync.RWMutex
-	taskDomainArgsForCall []struct{}
-	taskDomainReturns struct {
-		result1 string
-	}
-	BuildRecipeStub        func(request cc_messages.StagingRequestFromCC) (receptor.TaskCreateRequest, error)
+	BuildRecipeStub        func(stagingGuid string, request cc_messages.StagingRequestFromCC) (receptor.TaskCreateRequest, error)
 	buildRecipeMutex       sync.RWMutex
 	buildRecipeArgsForCall []struct {
-		request cc_messages.StagingRequestFromCC
+		stagingGuid string
+		request     cc_messages.StagingRequestFromCC
 	}
 	buildRecipeReturns struct {
 		result1 receptor.TaskCreateRequest
@@ -106,38 +101,15 @@ func (fake *FakeBackend) StopStagingRequestsReceivedCounterReturns(result1 metri
 	}{result1}
 }
 
-func (fake *FakeBackend) TaskDomain() string {
-	fake.taskDomainMutex.Lock()
-	fake.taskDomainArgsForCall = append(fake.taskDomainArgsForCall, struct{}{})
-	fake.taskDomainMutex.Unlock()
-	if fake.TaskDomainStub != nil {
-		return fake.TaskDomainStub()
-	} else {
-		return fake.taskDomainReturns.result1
-	}
-}
-
-func (fake *FakeBackend) TaskDomainCallCount() int {
-	fake.taskDomainMutex.RLock()
-	defer fake.taskDomainMutex.RUnlock()
-	return len(fake.taskDomainArgsForCall)
-}
-
-func (fake *FakeBackend) TaskDomainReturns(result1 string) {
-	fake.TaskDomainStub = nil
-	fake.taskDomainReturns = struct {
-		result1 string
-	}{result1}
-}
-
-func (fake *FakeBackend) BuildRecipe(request cc_messages.StagingRequestFromCC) (receptor.TaskCreateRequest, error) {
+func (fake *FakeBackend) BuildRecipe(stagingGuid string, request cc_messages.StagingRequestFromCC) (receptor.TaskCreateRequest, error) {
 	fake.buildRecipeMutex.Lock()
 	fake.buildRecipeArgsForCall = append(fake.buildRecipeArgsForCall, struct {
-		request cc_messages.StagingRequestFromCC
-	}{request})
+		stagingGuid string
+		request     cc_messages.StagingRequestFromCC
+	}{stagingGuid, request})
 	fake.buildRecipeMutex.Unlock()
 	if fake.BuildRecipeStub != nil {
-		return fake.BuildRecipeStub(request)
+		return fake.BuildRecipeStub(stagingGuid, request)
 	} else {
 		return fake.buildRecipeReturns.result1, fake.buildRecipeReturns.result2
 	}
@@ -149,10 +121,10 @@ func (fake *FakeBackend) BuildRecipeCallCount() int {
 	return len(fake.buildRecipeArgsForCall)
 }
 
-func (fake *FakeBackend) BuildRecipeArgsForCall(i int) cc_messages.StagingRequestFromCC {
+func (fake *FakeBackend) BuildRecipeArgsForCall(i int) (string, cc_messages.StagingRequestFromCC) {
 	fake.buildRecipeMutex.RLock()
 	defer fake.buildRecipeMutex.RUnlock()
-	return fake.buildRecipeArgsForCall[i].request
+	return fake.buildRecipeArgsForCall[i].stagingGuid, fake.buildRecipeArgsForCall[i].request
 }
 
 func (fake *FakeBackend) BuildRecipeReturns(result1 receptor.TaskCreateRequest, result2 error) {

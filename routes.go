@@ -9,7 +9,7 @@ const (
 )
 
 var Routes = rata.Routes{
-	{Path: "/v1/start", Method: "POST", Name: StageRoute},
-	{Path: "/v1/stop", Method: "DELETE", Name: StopStagingRoute},
-	{Path: "/v1/completed", Method: "POST", Name: StagingCompletedRoute},
+	{Path: "/v1/staging/:staging_guid", Method: "PUT", Name: StageRoute},
+	{Path: "/v1/staging/:staging_guid", Method: "DELETE", Name: StopStagingRoute},
+	{Path: "/v1/staging/:staging_guid/completed", Method: "POST", Name: StagingCompletedRoute},
 }

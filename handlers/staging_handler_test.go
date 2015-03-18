@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 
@@ -21,6 +20,7 @@ import (
 	"github.com/cloudfoundry/dropsonde/metrics"
 	"github.com/pivotal-golang/lager"
 	"github.com/pivotal-golang/lager/lagertest"
+	"github.com/tedsuo/rata"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -41,8 +41,8 @@ var _ = Describe("StagingHandler", func() {
 		fakeCcClient    *fakes.FakeCcClient
 		fakeBackend     *fake_backend.FakeBackend
 
-		handler          handlers.StagingHandler
 		responseRecorder *httptest.ResponseRecorder
+		rataHandler      http.Handler
 	)
 
 	BeforeEach(func() {
@@ -58,8 +58,25 @@ var _ = Describe("StagingHandler", func() {
 		fakeBackend.StopStagingRequestsReceivedCounterReturns(metric.Counter(FakeStopStagingRequestsReceivedCounter))
 		fakeDiegoClient = &fake_receptor.FakeClient{}
 
-		handler = handlers.NewStagingHandler(logger, map[string]backend.Backend{"fake-backend": fakeBackend}, fakeCcClient, fakeDiegoClient)
 		responseRecorder = httptest.NewRecorder()
+		handler := handlers.NewStagingHandler(logger, map[string]backend.Backend{"fake-backend": fakeBackend}, fakeCcClient, fakeDiegoClient)
+
+		var routes rata.Routes
+		for _, r := range stager.Routes {
+			if r.Name == stager.StageRoute {
+				routes = append(routes, r)
+			}
+			if r.Name == stager.StopStagingRoute {
+				routes = append(routes, r)
+			}
+		}
+
+		var err error
+		rataHandler, err = rata.NewRouter(routes, rata.Handlers{
+			stager.StageRoute:       http.HandlerFunc(handler.Stage),
+			stager.StopStagingRoute: http.HandlerFunc(handler.StopStaging),
+		})
+		Ω(err).ShouldNot(HaveOccurred())
 	})
 
 	Describe("Stage", func() {
@@ -68,10 +85,10 @@ var _ = Describe("StagingHandler", func() {
 		)
 
 		JustBeforeEach(func() {
-			req, err := http.NewRequest("POST", stager.StageRoute, bytes.NewReader(stagingRequestJson))
+			req, err := http.NewRequest("PUT", "/v1/staging/a-staging-guid", bytes.NewReader(stagingRequestJson))
 			Ω(err).ShouldNot(HaveOccurred())
 
-			handler.Stage(responseRecorder, req)
+			rataHandler.ServeHTTP(responseRecorder, req)
 		})
 
 		Context("when a staging request is received for a registered backend", func() {
@@ -80,7 +97,6 @@ var _ = Describe("StagingHandler", func() {
 			BeforeEach(func() {
 				stagingRequest = cc_messages.StagingRequestFromCC{
 					AppId:     "myapp",
-					TaskId:    "mytask",
 					Lifecycle: "fake-backend",
 				}
 
@@ -99,7 +115,10 @@ var _ = Describe("StagingHandler", func() {
 
 			It("builds a staging recipe", func() {
 				Ω(fakeBackend.BuildRecipeCallCount()).To(Equal(1))
-				Ω(fakeBackend.BuildRecipeArgsForCall(0)).To(Equal(stagingRequest))
+
+				guid, request := fakeBackend.BuildRecipeArgsForCall(0)
+				Ω(guid).Should(Equal("a-staging-guid"))
+				Ω(request).Should(Equal(stagingRequest))
 			})
 
 			Context("when the recipe was built successfully", func() {
@@ -228,28 +247,6 @@ var _ = Describe("StagingHandler", func() {
 			Context("when the app id is missing", func() {
 				BeforeEach(func() {
 					stagingRequest := cc_messages.StagingRequestFromCC{
-						TaskId:    "mytask",
-						Lifecycle: "fake-backend",
-					}
-
-					var err error
-					stagingRequestJson, err = json.Marshal(stagingRequest)
-					Ω(err).ShouldNot(HaveOccurred())
-				})
-
-				It("returns bad request", func() {
-					Ω(responseRecorder.Code).Should(Equal(http.StatusBadRequest))
-				})
-
-				It("does not send a staging complete message", func() {
-					Ω(fakeCcClient.StagingCompleteCallCount()).To(Equal(0))
-				})
-			})
-
-			Context("when the task id is missing", func() {
-				BeforeEach(func() {
-					stagingRequest := cc_messages.StagingRequestFromCC{
-						AppId:     "myapp",
 						Lifecycle: "fake-backend",
 					}
 
@@ -271,7 +268,6 @@ var _ = Describe("StagingHandler", func() {
 				BeforeEach(func() {
 					stagingRequest := cc_messages.StagingRequestFromCC{
 						AppId:     "myapp",
-						TaskId:    "mytask",
 						Lifecycle: "unknown-backend",
 					}
 
@@ -298,135 +294,92 @@ var _ = Describe("StagingHandler", func() {
 	})
 
 	Describe("StopStaging", func() {
-		var stopStagingRequestJson []byte
+		BeforeEach(func() {
+			stagingTask := receptor.TaskResponse{
+				TaskGuid:   "a-staging-guid",
+				Annotation: `{"lifecycle": "fake-backend"}`,
+			}
+
+			fakeDiegoClient.GetTaskReturns(stagingTask, nil)
+		})
 
 		JustBeforeEach(func() {
-			req, err := http.NewRequest("POST", stager.StopStagingRoute, bytes.NewReader(stopStagingRequestJson))
+			req, err := http.NewRequest("DELETE", "/v1/staging/a-staging-guid", nil)
 			Ω(err).ShouldNot(HaveOccurred())
 
-			handler.StopStaging(responseRecorder, req)
+			rataHandler.ServeHTTP(responseRecorder, req)
 		})
 
-		Context("when receiving a stop staging request for a registered backend", func() {
-			var stopStagingRequest cc_messages.StopStagingRequestFromCC
-
-			BeforeEach(func() {
-				stopStagingRequest = cc_messages.StopStagingRequestFromCC{
-					AppId:     "myapp",
-					TaskId:    "mytask",
-					Lifecycle: "fake-backend",
-				}
-
-				var err error
-				stopStagingRequestJson, err = json.Marshal(stopStagingRequest)
-				Ω(err).ShouldNot(HaveOccurred())
+		Context("when receiving a stop staging request", func() {
+			It("retrieves the current staging task by guid", func() {
+				Ω(fakeDiegoClient.GetTaskCallCount()).Should(Equal(1))
+				Ω(fakeDiegoClient.GetTaskArgsForCall(0)).Should(Equal("a-staging-guid"))
 			})
 
-			It("increments the counter to track arriving stop staging messages", func() {
-				Ω(fakeMetricSender.GetCounter(FakeStopStagingRequestsReceivedCounter)).Should(Equal(uint64(1)))
-			})
-
-			It("returns an Accepted response", func() {
-				Ω(responseRecorder.Code).Should(Equal(http.StatusAccepted))
-			})
-
-			Context("when the task guid was built successfully", func() {
-				var expectedTaskId string
-
+			Context("when an in-flight staging task is not found", func() {
 				BeforeEach(func() {
-					expectedTaskId = fmt.Sprintf("%s-%s", stopStagingRequest.AppId, stopStagingRequest.TaskId)
+					fakeDiegoClient.GetTaskReturns(receptor.TaskResponse{}, receptor.Error{Type: receptor.TaskNotFound})
 				})
 
-				It("cancels a task on Diego", func() {
-					Ω(fakeDiegoClient.CancelTaskCallCount()).To(Equal(1))
-					Ω(fakeDiegoClient.CancelTaskArgsForCall(0)).To(Equal(expectedTaskId))
-				})
-			})
-		})
-
-		Describe("bad requests", func() {
-			Context("when the request fails to unmarshal", func() {
-				BeforeEach(func() {
-					stopStagingRequestJson = []byte(`bad-json`)
-				})
-
-				It("returns bad request", func() {
-					Ω(responseRecorder.Code).Should(Equal(http.StatusBadRequest))
-				})
-
-				It("does not send a staging complete message", func() {
-					Ω(fakeCcClient.StagingCompleteCallCount()).To(Equal(0))
-				})
-			})
-
-			Context("when the app id is missing", func() {
-				BeforeEach(func() {
-					stopStagingRequest := cc_messages.StopStagingRequestFromCC{
-						TaskId:    "mytask",
-						Lifecycle: "fake-backend",
-					}
-
-					var err error
-					stopStagingRequestJson, err = json.Marshal(stopStagingRequest)
-					Ω(err).ShouldNot(HaveOccurred())
-				})
-
-				It("returns bad request", func() {
-					Ω(responseRecorder.Code).Should(Equal(http.StatusBadRequest))
-				})
-
-				It("does not send a staging complete message", func() {
-					Ω(fakeCcClient.StagingCompleteCallCount()).To(Equal(0))
-				})
-			})
-
-			Context("when the task id is missing", func() {
-				BeforeEach(func() {
-					stopStagingRequest := cc_messages.StopStagingRequestFromCC{
-						AppId:     "myapp",
-						Lifecycle: "fake-backend",
-					}
-
-					var err error
-					stopStagingRequestJson, err = json.Marshal(stopStagingRequest)
-					Ω(err).ShouldNot(HaveOccurred())
-				})
-
-				It("returns bad request", func() {
-					Ω(responseRecorder.Code).Should(Equal(http.StatusBadRequest))
-				})
-
-				It("does not send a staging complete message", func() {
-					Ω(fakeCcClient.StagingCompleteCallCount()).To(Equal(0))
-				})
-			})
-
-			Context("when a stop staging request is received for an unknown backend", func() {
-				BeforeEach(func() {
-					stagingRequest := cc_messages.StopStagingRequestFromCC{
-						AppId:     "myapp",
-						TaskId:    "mytask",
-						Lifecycle: "unknown-backend",
-					}
-
-					var err error
-					stopStagingRequestJson, err = json.Marshal(stagingRequest)
-					Ω(err).ShouldNot(HaveOccurred())
-				})
-
-				It("returns a Not Found response", func() {
+				It("returns StatusNotFound", func() {
 					Ω(responseRecorder.Code).Should(Equal(http.StatusNotFound))
 				})
 			})
 
-			Context("when a malformed stop staging request is received", func() {
+			Context("when retrieving the current task fails", func() {
 				BeforeEach(func() {
-					stopStagingRequestJson = []byte(`bogus-request`)
+					fakeDiegoClient.GetTaskReturns(receptor.TaskResponse{}, errors.New("boom"))
 				})
 
-				It("returns a BadRequest error", func() {
-					Ω(responseRecorder.Code).Should(Equal(http.StatusBadRequest))
+				It("returns StatusInternalServerError", func() {
+					Ω(responseRecorder.Code).Should(Equal(http.StatusInternalServerError))
 				})
+			})
+
+			Context("when retrieving the current task is sucessful", func() {
+				Context("when the task annotation fails to unmarshal", func() {
+					BeforeEach(func() {
+						stagingTask := receptor.TaskResponse{
+							TaskGuid:   "a-staging-guid",
+							Annotation: `,"lifecycle}`,
+						}
+
+						fakeDiegoClient.GetTaskReturns(stagingTask, nil)
+					})
+
+					It("returns StatusInternalServerError", func() {
+						Ω(responseRecorder.Code).Should(Equal(http.StatusInternalServerError))
+					})
+				})
+
+				Context("when the task annotation points to an unknown backend", func() {
+					BeforeEach(func() {
+						stagingTask := receptor.TaskResponse{
+							TaskGuid:   "a-staging-guid",
+							Annotation: `{"lifecycle": "unknown-backend"}`,
+						}
+
+						fakeDiegoClient.GetTaskReturns(stagingTask, nil)
+					})
+
+					It("returns StatusNotFound", func() {
+						Ω(responseRecorder.Code).Should(Equal(http.StatusNotFound))
+					})
+				})
+
+				It("increments the counter to track arriving stop staging messages", func() {
+					Ω(fakeMetricSender.GetCounter(FakeStopStagingRequestsReceivedCounter)).Should(Equal(uint64(1)))
+				})
+
+				It("cancels the Diego task", func() {
+					Ω(fakeDiegoClient.CancelTaskCallCount()).To(Equal(1))
+					Ω(fakeDiegoClient.CancelTaskArgsForCall(0)).To(Equal("a-staging-guid"))
+				})
+
+				It("returns an Accepted response", func() {
+					Ω(responseRecorder.Code).Should(Equal(http.StatusAccepted))
+				})
+
 			})
 		})
 	})

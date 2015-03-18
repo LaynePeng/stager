@@ -41,7 +41,8 @@ func NewStagingHandler(
 }
 
 func (handler *stagingHandler) Stage(resp http.ResponseWriter, req *http.Request) {
-	logger := handler.logger.Session("staging-request")
+	stagingGuid := req.FormValue(":staging_guid")
+	logger := handler.logger.Session("staging-request", lager.Data{"staging-guid": stagingGuid})
 
 	requestBody, err := ioutil.ReadAll(req.Body)
 	if err != nil {
@@ -67,14 +68,9 @@ func (handler *stagingHandler) Stage(resp http.ResponseWriter, req *http.Request
 		return
 	}
 
-	if stagingRequest.TaskId == "" {
-		resp.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
 	backend.StagingRequestsReceivedCounter().Increment()
 
-	taskRequest, err := backend.BuildRecipe(stagingRequest)
+	taskRequest, err := backend.BuildRecipe(stagingGuid, stagingRequest)
 	if err != nil {
 		logger.Error("recipe-building-failed", err, lager.Data{"staging-request": stagingRequest})
 
@@ -111,50 +107,45 @@ func (handler *stagingHandler) Stage(resp http.ResponseWriter, req *http.Request
 }
 
 func (handler *stagingHandler) StopStaging(resp http.ResponseWriter, req *http.Request) {
-	logger := handler.logger.Session("stop-staging-request")
+	taskGuid := req.FormValue(":staging_guid")
+	logger := handler.logger.Session("stop-staging-request", lager.Data{"staging-guid": taskGuid})
 
-	requestBody, err := ioutil.ReadAll(req.Body)
+	task, err := handler.diegoClient.GetTask(taskGuid)
 	if err != nil {
+		if receptorErr, ok := err.(receptor.Error); ok {
+			if receptorErr.Type == receptor.TaskNotFound {
+				resp.WriteHeader(http.StatusNotFound)
+				return
+			}
+		}
+
+		logger.Error("failed-to-get-task", err)
 		resp.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	var stopStagingRequest cc_messages.StopStagingRequestFromCC
-	err = json.Unmarshal(requestBody, &stopStagingRequest)
+	var annotation cc_messages.StagingTaskAnnotation
+	err = json.Unmarshal([]byte(task.Annotation), &annotation)
 	if err != nil {
-		logger.Error("unmarshal-request-failed", err)
-		resp.WriteHeader(http.StatusBadRequest)
+		logger.Error("failed-to-unmarshal-task-annotation", err)
+		resp.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	lifecycleBackend, found := handler.backends[stopStagingRequest.Lifecycle]
+	lifecycleBackend, found := handler.backends[annotation.Lifecycle]
 	if !found {
-		logger.Error("backend-not-found", nil, lager.Data{"backend": stopStagingRequest.Lifecycle})
+		logger.Error("backend-not-found", nil, lager.Data{"backend": annotation.Lifecycle})
 		resp.WriteHeader(http.StatusNotFound)
-		return
-	}
-
-	if stopStagingRequest.AppId == "" {
-		logger.Error("missing-app-id", nil)
-		resp.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	if stopStagingRequest.TaskId == "" {
-		logger.Error("missing-task-id", nil)
-		resp.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	resp.WriteHeader(http.StatusAccepted)
 	lifecycleBackend.StopStagingRequestsReceivedCounter().Increment()
 
-	taskGuid := backend.StagingTaskGuid(stopStagingRequest.AppId, stopStagingRequest.TaskId)
-
 	logger.Info("cancelling", lager.Data{"task_guid": taskGuid})
 
 	err = handler.diegoClient.CancelTask(taskGuid)
 	if err != nil {
-		logger.Error("stop-staging-failed", err, lager.Data{"stop-staging-request": requestBody})
+		logger.Error("stop-staging-failed", err)
 	}
 }

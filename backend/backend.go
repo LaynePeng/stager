@@ -27,24 +27,27 @@ type Backend interface {
 	StagingRequestsReceivedCounter() metric.Counter
 	StopStagingRequestsReceivedCounter() metric.Counter
 
-	BuildRecipe(request cc_messages.StagingRequestFromCC) (receptor.TaskCreateRequest, error)
+	BuildRecipe(stagingGuid string, request cc_messages.StagingRequestFromCC) (receptor.TaskCreateRequest, error)
 	BuildStagingResponse(receptor.TaskResponse) (cc_messages.StagingResponseForCC, error)
 	BuildStagingResponseFromRequestError(request cc_messages.StagingRequestFromCC, errorMessage string) cc_messages.StagingResponseForCC
 }
 
 var ErrNoCompilerDefined = errors.New(diego_errors.NO_COMPILER_DEFINED_MESSAGE)
 var ErrMissingAppId = errors.New(diego_errors.MISSING_APP_ID_MESSAGE)
-var ErrMissingTaskId = errors.New(diego_errors.MISSING_TASK_ID_MESSAGE)
 var ErrMissingAppBitsDownloadUri = errors.New(diego_errors.MISSING_APP_BITS_DOWNLOAD_URI_MESSAGE)
 var ErrMissingLifecycleData = errors.New(diego_errors.MISSING_LIFECYCLE_DATA_MESSAGE)
 
 type Config struct {
 	TaskDomain     string
-	CallbackURL    string
+	StagerURL      string
 	FileServerURL  string
 	Lifecycles     map[string]string
 	SkipCertVerify bool
 	Sanitizer      FailureReasonSanitizer
+}
+
+func (c Config) CallbackURL(stagingGuid string) string {
+	return fmt.Sprintf("%s/v1/staging/%s/completed", c.StagerURL, stagingGuid)
 }
 
 func max(x, y uint64) uint64 {
@@ -53,10 +56,6 @@ func max(x, y uint64) uint64 {
 	} else {
 		return y
 	}
-}
-
-func StagingTaskGuid(appId, taskId string) string {
-	return fmt.Sprintf("%s-%s", appId, taskId)
 }
 
 func addTimeoutParamToURL(u url.URL, timeout time.Duration) *url.URL {

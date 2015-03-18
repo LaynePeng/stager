@@ -33,7 +33,7 @@ var _ = Describe("Stager", func() {
 	BeforeEach(func() {
 		stagerPort := 8888 + GinkgoParallelNode()
 		stagerURL := fmt.Sprintf("http://127.0.0.1:%d", stagerPort)
-		callbackURL = stagerURL + "/v1/completed"
+		callbackURL = stagerURL + "/v1/staging/my-task-guid/completed"
 
 		fakeReceptor = ghttp.NewServer()
 		fakeCC = ghttp.NewServer()
@@ -74,9 +74,8 @@ var _ = Describe("Stager", func() {
 					Ω(taskRequest.CompletionCallbackURL).Should(Equal(callbackURL))
 				})
 
-				req, err := requestGenerator.CreateRequest(stager.StageRoute, rata.Params{}, strings.NewReader(`{
+				req, err := requestGenerator.CreateRequest(stager.StageRoute, rata.Params{"staging_guid": "my-task-guid"}, strings.NewReader(`{
 					"app_id":"my-app-guid",
-					"task_id":"my-task-guid",
 					"stack":"lucid64",
 					"file_descriptors":3,
 					"memory_mb" : 1024,
@@ -112,9 +111,8 @@ var _ = Describe("Stager", func() {
 					Ω(taskRequest.CompletionCallbackURL).Should(Equal(callbackURL))
 				})
 
-				req, err := requestGenerator.CreateRequest(stager.StageRoute, rata.Params{}, strings.NewReader(`{
+				req, err := requestGenerator.CreateRequest(stager.StageRoute, rata.Params{"staging_guid": "my-task-guid"}, strings.NewReader(`{
 					"app_id":"my-app-guid",
-					"task_id":"my-task-guid",
 					"stack":"lucid64",
 					"file_descriptors":3,
 					"memory_mb" : 1024,
@@ -142,11 +140,9 @@ var _ = Describe("Stager", func() {
 				BeforeEach(func() {
 					fakeCC.AppendHandlers(
 						ghttp.CombineHandlers(
-							ghttp.VerifyRequest("POST", "/internal/staging/completed"),
+							ghttp.VerifyRequest("POST", "/internal/staging/the-task-guid/completed"),
 							ghttp.VerifyContentType("application/json"),
 							ghttp.VerifyJSON(`{
-								"app_id": "app-id",
-								"task_id": "task-id",
 								"execution_metadata": "metadata",
 								"detected_start_command": {"a": "b"}
 							}`),
@@ -160,9 +156,7 @@ var _ = Describe("Stager", func() {
 						},
 						Domain: backend.StagingTaskDomain,
 						Annotation: `{
-							"lifecycle": "docker",
-							"app_id": "app-id",
-							"task_id": "task-id"
+							"lifecycle": "docker"
 						}`,
 						Result: `{
 							"execution_metadata": "metadata",
@@ -171,7 +165,7 @@ var _ = Describe("Stager", func() {
 					})
 					Ω(err).ShouldNot(HaveOccurred())
 
-					req, err := requestGenerator.CreateRequest(stager.StagingCompletedRoute, rata.Params{}, bytes.NewReader(taskJSON))
+					req, err := requestGenerator.CreateRequest(stager.StagingCompletedRoute, rata.Params{"staging_guid": "the-task-guid"}, bytes.NewReader(taskJSON))
 					Ω(err).ShouldNot(HaveOccurred())
 
 					req.Header.Set("Content-Type", "application/json")
@@ -190,11 +184,9 @@ var _ = Describe("Stager", func() {
 				BeforeEach(func() {
 					fakeCC.AppendHandlers(
 						ghttp.CombineHandlers(
-							ghttp.VerifyRequest("POST", "/internal/staging/completed"),
+							ghttp.VerifyRequest("POST", "/internal/staging/the-task-guid/completed"),
 							ghttp.VerifyContentType("application/json"),
 							ghttp.VerifyJSON(`{
-								"app_id": "app-id",
-								"task_id": "task-id",
 								"execution_metadata": "metadata",
 								"detected_start_command": {"a": "b"},
 								"lifecycle_data": {
@@ -212,9 +204,7 @@ var _ = Describe("Stager", func() {
 						},
 						Domain: backend.StagingTaskDomain,
 						Annotation: `{
-							"lifecycle": "buildpack",
-							"app_id": "app-id",
-							"task_id": "task-id"
+							"lifecycle": "buildpack"
 						}`,
 						Result: `{
 							"buildpack_key": "buildpack-key",
@@ -225,7 +215,7 @@ var _ = Describe("Stager", func() {
 					})
 					Ω(err).ShouldNot(HaveOccurred())
 
-					req, err := requestGenerator.CreateRequest(stager.StagingCompletedRoute, rata.Params{}, bytes.NewReader(taskJSON))
+					req, err := requestGenerator.CreateRequest(stager.StagingCompletedRoute, rata.Params{"staging_guid": "the-task-guid"}, bytes.NewReader(taskJSON))
 					Ω(err).ShouldNot(HaveOccurred())
 
 					req.Header.Set("Content-Type", "application/json")

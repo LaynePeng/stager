@@ -48,7 +48,7 @@ func (backend *dockerBackend) StopStagingRequestsReceivedCounter() metric.Counte
 	return DockerStopStagingRequestsReceivedCounter
 }
 
-func (backend *dockerBackend) BuildRecipe(request cc_messages.StagingRequestFromCC) (receptor.TaskCreateRequest, error) {
+func (backend *dockerBackend) BuildRecipe(stagingGuid string, request cc_messages.StagingRequestFromCC) (receptor.TaskCreateRequest, error) {
 	logger := backend.logger.Session("build-recipe")
 	logger.Info("staging-request", lager.Data{"Request": request})
 
@@ -107,19 +107,17 @@ func (backend *dockerBackend) BuildRecipe(request cc_messages.StagingRequestFrom
 
 	annotationJson, _ := json.Marshal(cc_messages.StagingTaskAnnotation{
 		Lifecycle: DockerLifecycleName,
-		AppId:     request.AppId,
-		TaskId:    request.TaskId,
 	})
 
 	task := receptor.TaskCreateRequest{
+		TaskGuid:              stagingGuid,
 		ResultFile:            DockerBuilderOutputPath,
-		TaskGuid:              StagingTaskGuid(request.AppId, request.TaskId),
 		Domain:                backend.config.TaskDomain,
 		Stack:                 request.Stack,
 		MemoryMB:              request.MemoryMB,
 		DiskMB:                request.DiskMB,
 		Action:                models.Timeout(models.Serial(actions...), dockerTimeout(request, backend.logger)),
-		CompletionCallbackURL: backend.config.CallbackURL,
+		CompletionCallbackURL: backend.config.CallbackURL(stagingGuid),
 		LogGuid:               request.AppId,
 		LogSource:             TaskLogSource,
 		Annotation:            string(annotationJson),
@@ -134,9 +132,7 @@ func (backend *dockerBackend) BuildRecipe(request cc_messages.StagingRequestFrom
 
 func (backend *dockerBackend) BuildStagingResponseFromRequestError(request cc_messages.StagingRequestFromCC, errorMessage string) cc_messages.StagingResponseForCC {
 	return cc_messages.StagingResponseForCC{
-		AppId:  request.AppId,
-		TaskId: request.TaskId,
-		Error:  backend.config.Sanitizer(errorMessage),
+		Error: backend.config.Sanitizer(errorMessage),
 	}
 }
 
@@ -148,9 +144,6 @@ func (backend *dockerBackend) BuildStagingResponse(taskResponse receptor.TaskRes
 	if err != nil {
 		return cc_messages.StagingResponseForCC{}, err
 	}
-
-	response.AppId = annotation.AppId
-	response.TaskId = annotation.TaskId
 
 	if taskResponse.Failed {
 		response.Error = backend.config.Sanitizer(taskResponse.FailureReason)
@@ -208,10 +201,6 @@ func (backend *dockerBackend) validateRequest(stagingRequest cc_messages.Staging
 		return ErrMissingAppId
 	}
 
-	if len(stagingRequest.TaskId) == 0 {
-		return ErrMissingTaskId
-	}
-
 	if len(dockerData.DockerImageUrl) == 0 {
 		return ErrMissingDockerImageUrl
 	}
@@ -227,7 +216,6 @@ func dockerTimeout(request cc_messages.StagingRequestFromCC, logger lager.Logger
 			"requested-timeout": request.Timeout,
 			"default-timeout":   DefaultStagingTimeout,
 			"app-id":            request.AppId,
-			"task-id":           request.TaskId,
 		})
 		return DefaultStagingTimeout
 	}
