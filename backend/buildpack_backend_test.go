@@ -568,24 +568,6 @@ var _ = Describe("TraditionalBackend", func() {
 	Describe("response building", func() {
 		var response cc_messages.StagingResponseForCC
 
-		Describe("BuildStagingResponseFromRequestError", func() {
-			JustBeforeEach(func() {
-				response = traditional.BuildStagingResponseFromRequestError(stagingRequest, "fake-error-message")
-			})
-
-			Context("with a valid request", func() {
-				BeforeEach(func() {
-					appId = "myapp"
-				})
-
-				It("returns a correctly populated staging response", func() {
-					Ω(response).Should(Equal(cc_messages.StagingResponseForCC{
-						Error: &cc_messages.StagingError{Message: "fake-error-message was totally sanitized"},
-					}))
-				})
-			})
-		})
-
 		Describe("BuildStagingResponse", func() {
 			var annotationJson []byte
 			var stagingResultJson []byte

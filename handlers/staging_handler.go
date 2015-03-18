@@ -77,11 +77,7 @@ func (handler *stagingHandler) Stage(resp http.ResponseWriter, req *http.Request
 	taskRequest, err := backend.BuildRecipe(stagingGuid, stagingRequest)
 	if err != nil {
 		logger.Error("recipe-building-failed", err, lager.Data{"staging-request": stagingRequest})
-
-		resp.WriteHeader(http.StatusInternalServerError)
-		response := backend.BuildStagingResponseFromRequestError(stagingRequest, "Recipe building failed: "+err.Error())
-		responseJson, _ := json.Marshal(response)
-		resp.Write(responseJson)
+		handler.doErrorResponse(resp, "Recipe building failed: "+err.Error())
 		return
 	}
 
@@ -99,15 +95,21 @@ func (handler *stagingHandler) Stage(resp http.ResponseWriter, req *http.Request
 
 	if err != nil {
 		logger.Error("staging-failed", err, lager.Data{"staging-request": stagingRequest})
-
-		resp.WriteHeader(http.StatusInternalServerError)
-		response := backend.BuildStagingResponseFromRequestError(stagingRequest, "Staging failed: "+err.Error())
-		responseJson, _ := json.Marshal(response)
-		resp.Write(responseJson)
+		handler.doErrorResponse(resp, "Staging failed: "+err.Error())
 		return
 	}
 
 	resp.WriteHeader(http.StatusAccepted)
+}
+
+func (handler *stagingHandler) doErrorResponse(resp http.ResponseWriter, message string) {
+	response := cc_messages.StagingResponseForCC{
+		Error: cc_messages.SanitizeErrorMessage(message),
+	}
+	responseJson, _ := json.Marshal(response)
+
+	resp.WriteHeader(http.StatusInternalServerError)
+	resp.Write(responseJson)
 }
 
 func (handler *stagingHandler) StopStaging(resp http.ResponseWriter, req *http.Request) {

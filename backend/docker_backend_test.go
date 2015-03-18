@@ -265,28 +265,7 @@ var _ = Describe("DockerBackend", func() {
 	})
 
 	Describe("building staging responses", func() {
-		var request cc_messages.StagingRequestFromCC
 		var response cc_messages.StagingResponseForCC
-
-		Describe("BuildStagingResponseFromRequestError", func() {
-			JustBeforeEach(func() {
-				response = docker.BuildStagingResponseFromRequestError(request, "fake-error-message")
-			})
-
-			Context("with a valid request", func() {
-				BeforeEach(func() {
-					request = cc_messages.StagingRequestFromCC{
-						AppId: "myapp",
-					}
-				})
-
-				It("returns a correctly populated staging response", func() {
-					Ω(response).Should(Equal(cc_messages.StagingResponseForCC{
-						Error: &cc_messages.StagingError{Message: "fake-error-message was totally sanitized"},
-					}))
-				})
-			})
-		})
 
 		Describe("BuildStagingResponse", func() {
 			var annotationJson []byte

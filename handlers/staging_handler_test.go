@@ -156,8 +156,11 @@ var _ = Describe("StagingHandler", func() {
 				})
 
 				Context("create task fails for any other reason", func() {
+					var taskCreateError error
+
 					BeforeEach(func() {
-						fakeDiegoClient.CreateTaskReturns(errors.New("create task error"))
+						taskCreateError = errors.New("some task create error")
+						fakeDiegoClient.CreateTaskReturns(taskCreateError)
 					})
 
 					It("logs the failure", func() {
@@ -176,8 +179,9 @@ var _ = Describe("StagingHandler", func() {
 						var responseForCC cc_messages.StagingResponseForCC
 
 						BeforeEach(func() {
-							responseForCC = cc_messages.StagingResponseForCC{Error: &cc_messages.StagingError{Message: "create task error"}}
-							fakeBackend.BuildStagingResponseFromRequestErrorReturns(responseForCC)
+							responseForCC = cc_messages.StagingResponseForCC{
+								Error: cc_messages.SanitizeErrorMessage("Staging failed: " + taskCreateError.Error()),
+							}
 						})
 
 						It("returns the cloud controller error response", func() {
@@ -193,8 +197,11 @@ var _ = Describe("StagingHandler", func() {
 			})
 
 			Context("when the recipe failed to be built", func() {
+				var buildRecipeError error
+
 				BeforeEach(func() {
-					fakeBackend.BuildRecipeReturns(receptor.TaskCreateRequest{}, errors.New("fake error"))
+					buildRecipeError = errors.New("some build recipe error")
+					fakeBackend.BuildRecipeReturns(receptor.TaskCreateRequest{}, buildRecipeError)
 				})
 
 				It("logs the failure", func() {
@@ -213,8 +220,9 @@ var _ = Describe("StagingHandler", func() {
 					var responseForCC cc_messages.StagingResponseForCC
 
 					BeforeEach(func() {
-						responseForCC = cc_messages.StagingResponseForCC{Error: &cc_messages.StagingError{Message: "some fake error"}}
-						fakeBackend.BuildStagingResponseFromRequestErrorReturns(responseForCC)
+						responseForCC = cc_messages.StagingResponseForCC{
+							Error: cc_messages.SanitizeErrorMessage("Recipe building failed: " + buildRecipeError.Error()),
+						}
 					})
 
 					It("returns the cloud controller error response", func() {

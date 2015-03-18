@@ -42,15 +42,6 @@ type FakeBackend struct {
 		result1 cc_messages.StagingResponseForCC
 		result2 error
 	}
-	BuildStagingResponseFromRequestErrorStub        func(request cc_messages.StagingRequestFromCC, errorMessage string) cc_messages.StagingResponseForCC
-	buildStagingResponseFromRequestErrorMutex       sync.RWMutex
-	buildStagingResponseFromRequestErrorArgsForCall []struct {
-		request      cc_messages.StagingRequestFromCC
-		errorMessage string
-	}
-	buildStagingResponseFromRequestErrorReturns struct {
-		result1 cc_messages.StagingResponseForCC
-	}
 }
 
 func (fake *FakeBackend) StagingRequestsReceivedCounter() metric.Counter {
@@ -166,39 +157,6 @@ func (fake *FakeBackend) BuildStagingResponseReturns(result1 cc_messages.Staging
 		result1 cc_messages.StagingResponseForCC
 		result2 error
 	}{result1, result2}
-}
-
-func (fake *FakeBackend) BuildStagingResponseFromRequestError(request cc_messages.StagingRequestFromCC, errorMessage string) cc_messages.StagingResponseForCC {
-	fake.buildStagingResponseFromRequestErrorMutex.Lock()
-	fake.buildStagingResponseFromRequestErrorArgsForCall = append(fake.buildStagingResponseFromRequestErrorArgsForCall, struct {
-		request      cc_messages.StagingRequestFromCC
-		errorMessage string
-	}{request, errorMessage})
-	fake.buildStagingResponseFromRequestErrorMutex.Unlock()
-	if fake.BuildStagingResponseFromRequestErrorStub != nil {
-		return fake.BuildStagingResponseFromRequestErrorStub(request, errorMessage)
-	} else {
-		return fake.buildStagingResponseFromRequestErrorReturns.result1
-	}
-}
-
-func (fake *FakeBackend) BuildStagingResponseFromRequestErrorCallCount() int {
-	fake.buildStagingResponseFromRequestErrorMutex.RLock()
-	defer fake.buildStagingResponseFromRequestErrorMutex.RUnlock()
-	return len(fake.buildStagingResponseFromRequestErrorArgsForCall)
-}
-
-func (fake *FakeBackend) BuildStagingResponseFromRequestErrorArgsForCall(i int) (cc_messages.StagingRequestFromCC, string) {
-	fake.buildStagingResponseFromRequestErrorMutex.RLock()
-	defer fake.buildStagingResponseFromRequestErrorMutex.RUnlock()
-	return fake.buildStagingResponseFromRequestErrorArgsForCall[i].request, fake.buildStagingResponseFromRequestErrorArgsForCall[i].errorMessage
-}
-
-func (fake *FakeBackend) BuildStagingResponseFromRequestErrorReturns(result1 cc_messages.StagingResponseForCC) {
-	fake.BuildStagingResponseFromRequestErrorStub = nil
-	fake.buildStagingResponseFromRequestErrorReturns = struct {
-		result1 cc_messages.StagingResponseForCC
-	}{result1}
 }
 
 var _ backend.Backend = new(FakeBackend)

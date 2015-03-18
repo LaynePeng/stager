@@ -130,12 +130,6 @@ func (backend *dockerBackend) BuildRecipe(stagingGuid string, request cc_message
 	return task, nil
 }
 
-func (backend *dockerBackend) BuildStagingResponseFromRequestError(request cc_messages.StagingRequestFromCC, errorMessage string) cc_messages.StagingResponseForCC {
-	return cc_messages.StagingResponseForCC{
-		Error: backend.config.Sanitizer(errorMessage),
-	}
-}
-
 func (backend *dockerBackend) BuildStagingResponse(taskResponse receptor.TaskResponse) (cc_messages.StagingResponseForCC, error) {
 	var response cc_messages.StagingResponseForCC
 
