@@ -66,12 +66,6 @@ func (handler *stagingHandler) Stage(resp http.ResponseWriter, req *http.Request
 		return
 	}
 
-	if stagingRequest.AppId == "" {
-		logger.Error("missing-app-id", err)
-		resp.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
 	backend.StagingRequestsReceivedCounter().Increment()
 
 	taskRequest, err := backend.BuildRecipe(stagingGuid, stagingRequest)

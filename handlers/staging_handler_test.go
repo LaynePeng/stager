@@ -252,26 +252,6 @@ var _ = Describe("StagingHandler", func() {
 				})
 			})
 
-			Context("when the app id is missing", func() {
-				BeforeEach(func() {
-					stagingRequest := cc_messages.StagingRequestFromCC{
-						Lifecycle: "fake-backend",
-					}
-
-					var err error
-					stagingRequestJson, err = json.Marshal(stagingRequest)
-					Ω(err).ShouldNot(HaveOccurred())
-				})
-
-				It("returns bad request", func() {
-					Ω(responseRecorder.Code).Should(Equal(http.StatusBadRequest))
-				})
-
-				It("does not send a staging complete message", func() {
-					Ω(fakeCcClient.StagingCompleteCallCount()).To(Equal(0))
-				})
-			})
-
 			Context("when a staging request is received for an unknown backend", func() {
 				BeforeEach(func() {
 					stagingRequest := cc_messages.StagingRequestFromCC{
