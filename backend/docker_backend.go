@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	DockerTaskDomain                         = "cf-app-docker-staging"
+	DockerLifecycleName                      = "docker"
 	DockerStagingRequestsReceivedCounter     = metric.Counter("DockerStagingRequestsReceived")
 	DockerStopStagingRequestsReceivedCounter = metric.Counter("DockerStopStagingRequestsReceived")
 	DockerBuilderExecutablePath              = "/tmp/docker_app_lifecycle/builder"
@@ -46,10 +46,6 @@ func (backend *dockerBackend) StagingRequestsReceivedCounter() metric.Counter {
 
 func (backend *dockerBackend) StopStagingRequestsReceivedCounter() metric.Counter {
 	return DockerStopStagingRequestsReceivedCounter
-}
-
-func (backend *dockerBackend) TaskDomain() string {
-	return DockerTaskDomain
 }
 
 func (backend *dockerBackend) BuildRecipe(request cc_messages.StagingRequestFromCC) (receptor.TaskCreateRequest, error) {
@@ -109,15 +105,16 @@ func (backend *dockerBackend) BuildRecipe(request cc_messages.StagingRequestFrom
 		),
 	)
 
-	annotationJson, _ := json.Marshal(models.StagingTaskAnnotation{
-		AppId:  request.AppId,
-		TaskId: request.TaskId,
+	annotationJson, _ := json.Marshal(cc_messages.StagingTaskAnnotation{
+		Lifecycle: DockerLifecycleName,
+		AppId:     request.AppId,
+		TaskId:    request.TaskId,
 	})
 
 	task := receptor.TaskCreateRequest{
 		ResultFile:            DockerBuilderOutputPath,
 		TaskGuid:              StagingTaskGuid(request.AppId, request.TaskId),
-		Domain:                DockerTaskDomain,
+		Domain:                backend.config.TaskDomain,
 		Stack:                 request.Stack,
 		MemoryMB:              request.MemoryMB,
 		DiskMB:                request.DiskMB,
@@ -146,7 +143,7 @@ func (backend *dockerBackend) BuildStagingResponseFromRequestError(request cc_me
 func (backend *dockerBackend) BuildStagingResponse(taskResponse receptor.TaskResponse) (cc_messages.StagingResponseForCC, error) {
 	var response cc_messages.StagingResponseForCC
 
-	var annotation models.StagingTaskAnnotation
+	var annotation cc_messages.StagingTaskAnnotation
 	err := json.Unmarshal([]byte(taskResponse.Annotation), &annotation)
 	if err != nil {
 		return cc_messages.StagingResponseForCC{}, err

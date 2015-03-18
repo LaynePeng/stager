@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -56,12 +55,22 @@ func (handler *completionHandler) StagingComplete(res http.ResponseWriter, req *
 		"guid": task.TaskGuid,
 	})
 
-	response, err := handler.stagingResponse(task)
-	if response == nil {
+	var annotation cc_messages.StagingTaskAnnotation
+	err = json.Unmarshal([]byte(task.Annotation), &annotation)
+	if err != nil {
+		res.WriteHeader(http.StatusBadRequest)
+		logger.Error("parsing-annotation-failed", err)
+		return
+	}
+
+	backend := handler.backends[annotation.Lifecycle]
+	if backend == nil {
 		res.WriteHeader(http.StatusNotFound)
 		logger.Error("get-staging-response-failed-backend-not-found", err)
 		return
 	}
+
+	response, err := backend.BuildStagingResponse(task)
 	if err != nil {
 		res.WriteHeader(http.StatusBadRequest)
 		logger.Error("get-staging-response-failed", err)
@@ -111,18 +120,4 @@ func (handler *completionHandler) reportMetrics(task receptor.TaskResponse) {
 		stagingSuccessDuration.Send(duration)
 		stagingSuccessCounter.Increment()
 	}
-}
-
-func (handler *completionHandler) stagingResponse(task receptor.TaskResponse) (*cc_messages.StagingResponseForCC, error) {
-	for _, backend := range handler.backends {
-		if backend.TaskDomain() == task.Domain {
-			response, err := backend.BuildStagingResponse(task)
-			if err != nil {
-				response = cc_messages.StagingResponseForCC{}
-			}
-			return &response, err
-		}
-	}
-
-	return nil, fmt.Errorf("No handler for domain: %q", task.Domain)
 }

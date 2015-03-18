@@ -50,6 +50,7 @@ var _ = Describe("TraditionalBackend", func() {
 		callbackURL = "http://the-stager.example.com"
 
 		config = backend.Config{
+			TaskDomain:    "config-task-domain",
 			CallbackURL:   callbackURL,
 			FileServerURL: "http://file-server.com",
 			Lifecycles: map[string]string{
@@ -232,7 +233,7 @@ var _ = Describe("TraditionalBackend", func() {
 		desiredTask, err := traditional.BuildRecipe(stagingRequest)
 		Ω(err).ShouldNot(HaveOccurred())
 
-		Ω(desiredTask.Domain).To(Equal("cf-app-staging"))
+		Ω(desiredTask.Domain).To(Equal("config-task-domain"))
 		Ω(desiredTask.TaskGuid).To(Equal("bunny-hop"))
 		Ω(desiredTask.Stack).To(Equal("rabbit_hole"))
 		Ω(desiredTask.LogGuid).To(Equal("bunny"))
@@ -241,14 +242,15 @@ var _ = Describe("TraditionalBackend", func() {
 		Ω(desiredTask.ResultFile).To(Equal("/tmp/result.json"))
 		Ω(desiredTask.Privileged).Should(BeTrue())
 
-		var annotation models.StagingTaskAnnotation
+		var annotation cc_messages.StagingTaskAnnotation
 
 		err = json.Unmarshal([]byte(desiredTask.Annotation), &annotation)
 		Ω(err).ShouldNot(HaveOccurred())
 
-		Ω(annotation).Should(Equal(models.StagingTaskAnnotation{
-			AppId:  "bunny",
-			TaskId: "hop",
+		Ω(annotation).Should(Equal(cc_messages.StagingTaskAnnotation{
+			Lifecycle: "buildpack",
+			AppId:     "bunny",
+			TaskId:    "hop",
 		}))
 
 		actions := actionsFromDesiredTask(desiredTask)
@@ -335,21 +337,22 @@ var _ = Describe("TraditionalBackend", func() {
 			desiredTask, err := traditional.BuildRecipe(stagingRequest)
 			Ω(err).ShouldNot(HaveOccurred())
 
-			Ω(desiredTask.Domain).To(Equal("cf-app-staging"))
+			Ω(desiredTask.Domain).To(Equal("config-task-domain"))
 			Ω(desiredTask.TaskGuid).To(Equal("bunny-hop"))
 			Ω(desiredTask.Stack).To(Equal("rabbit_hole"))
 			Ω(desiredTask.LogGuid).To(Equal("bunny"))
 			Ω(desiredTask.LogSource).To(Equal(backend.TaskLogSource))
 			Ω(desiredTask.ResultFile).To(Equal("/tmp/result.json"))
 
-			var annotation models.StagingTaskAnnotation
+			var annotation cc_messages.StagingTaskAnnotation
 
 			err = json.Unmarshal([]byte(desiredTask.Annotation), &annotation)
 			Ω(err).ShouldNot(HaveOccurred())
 
-			Ω(annotation).Should(Equal(models.StagingTaskAnnotation{
-				AppId:  "bunny",
-				TaskId: "hop",
+			Ω(annotation).Should(Equal(cc_messages.StagingTaskAnnotation{
+				Lifecycle: "buildpack",
+				AppId:     "bunny",
+				TaskId:    "hop",
 			}))
 
 			actions := actionsFromDesiredTask(desiredTask)
@@ -609,9 +612,10 @@ var _ = Describe("TraditionalBackend", func() {
 
 			Context("with a valid annotation", func() {
 				BeforeEach(func() {
-					annotation := models.StagingTaskAnnotation{
-						AppId:  "app-id",
-						TaskId: "task-id",
+					annotation := cc_messages.StagingTaskAnnotation{
+						Lifecycle: "buildpack",
+						AppId:     "app-id",
+						TaskId:    "task-id",
 					}
 					var err error
 					annotationJson, err = json.Marshal(annotation)

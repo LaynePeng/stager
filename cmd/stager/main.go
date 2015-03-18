@@ -139,6 +139,7 @@ func initializeBackends(logger lager.Logger) map[string]backend.Backend {
 
 	callbackURL.Path = "/v1/completed"
 	config := backend.Config{
+		TaskDomain:     backend.StagingTaskDomain,
 		CallbackURL:    callbackURL.String(),
 		FileServerURL:  *fileServerURL,
 		Lifecycles:     lifecyclesMap,

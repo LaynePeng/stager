@@ -58,13 +58,12 @@ var _ = Describe("StagingCompletedHandler", func() {
 
 		fakeCCClient = &fakes.FakeCcClient{}
 		fakeBackend = &fake_backend.FakeBackend{}
-		fakeBackend.TaskDomainReturns("fake-domain")
 		backendError = nil
 
 		fakeClock = fakeclock.NewFakeClock(time.Now())
 
 		responseRecorder = httptest.NewRecorder()
-		handler = handlers.NewStagingCompletionHandler(logger, fakeCCClient, map[string]backend.Backend{"fake-backend": fakeBackend}, fakeClock)
+		handler = handlers.NewStagingCompletionHandler(logger, fakeCCClient, map[string]backend.Backend{"fake": fakeBackend}, fakeClock)
 	})
 
 	JustBeforeEach(func() {
@@ -83,13 +82,19 @@ var _ = Describe("StagingCompletedHandler", func() {
 
 	Context("when a staging task completes", func() {
 		var taskResponse receptor.TaskResponse
+		var annotationJson []byte
+
+		BeforeEach(func() {
+			var err error
+			annotationJson, err = json.Marshal(cc_messages.StagingTaskAnnotation{
+				Lifecycle: "fake",
+				AppId:     appId,
+				TaskId:    taskId,
+			})
+			Ω(err).ShouldNot(HaveOccurred())
+		})
 
 		JustBeforeEach(func() {
-			annotationJson, _ := json.Marshal(models.StagingTaskAnnotation{
-				AppId:  appId,
-				TaskId: taskId,
-			})
-
 			createdAt := fakeClock.Now().UnixNano()
 			fakeClock.Increment(stagingDurationNano)
 
@@ -115,6 +120,53 @@ var _ = Describe("StagingCompletedHandler", func() {
 		It("passes the task response to the matching response builder", func() {
 			Eventually(fakeBackend.BuildStagingResponseCallCount()).Should(Equal(1))
 			Ω(fakeBackend.BuildStagingResponseArgsForCall(0)).Should(Equal(taskResponse))
+		})
+
+		Describe("staging task annotation", func() {
+			Context("when the annotation is missing", func() {
+				BeforeEach(func() {
+					annotationJson = []byte("")
+				})
+
+				It("returns bad request", func() {
+					Ω(responseRecorder.Code).Should(Equal(http.StatusBadRequest))
+				})
+
+				It("does not post staging complete to the CC", func() {
+					Ω(fakeCCClient.StagingCompleteCallCount()).Should(Equal(0))
+				})
+			})
+
+			Context("when the annotation is invalid JSON", func() {
+				BeforeEach(func() {
+					annotationJson = []byte(",goo")
+				})
+
+				It("returns bad request", func() {
+					Ω(responseRecorder.Code).Should(Equal(http.StatusBadRequest))
+				})
+
+				It("does not post staging complete to the CC", func() {
+					Ω(fakeCCClient.StagingCompleteCallCount()).Should(Equal(0))
+				})
+			})
+
+			Context("when lifecycle is missing from the annotation", func() {
+				BeforeEach(func() {
+					annotationJson = []byte(`{
+						"task_id": "the-task-id",
+						"app_id": "the-app-id"
+					}`)
+				})
+
+				It("returns not found", func() {
+					Ω(responseRecorder.Code).Should(Equal(http.StatusNotFound))
+				})
+
+				It("does not post staging complete to the CC", func() {
+					Ω(fakeCCClient.StagingCompleteCallCount()).Should(Equal(0))
+				})
+			})
 		})
 
 		Context("when the response builder returns an error", func() {
@@ -218,6 +270,7 @@ var _ = Describe("StagingCompletedHandler", func() {
 				CreatedAt:     createdAt,
 				FailureReason: "because I said so",
 				Annotation: `{
+					"lifecycle": "fake",
 					"task_id": "the-task-id",
 					"app_id": "the-app-id"
 				}`,

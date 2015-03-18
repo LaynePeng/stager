@@ -158,8 +158,9 @@ var _ = Describe("Stager", func() {
 						Action: &models.RunAction{
 							Path: "ls",
 						},
-						Domain: backend.DockerTaskDomain,
+						Domain: backend.StagingTaskDomain,
 						Annotation: `{
+							"lifecycle": "docker",
 							"app_id": "app-id",
 							"task_id": "task-id"
 						}`,
@@ -209,8 +210,9 @@ var _ = Describe("Stager", func() {
 						Action: &models.RunAction{
 							Path: "ls",
 						},
-						Domain: backend.TraditionalTaskDomain,
+						Domain: backend.StagingTaskDomain,
 						Annotation: `{
+							"lifecycle": "buildpack",
 							"app_id": "app-id",
 							"task_id": "task-id"
 						}`,

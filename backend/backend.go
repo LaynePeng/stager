@@ -16,6 +16,8 @@ import (
 const (
 	TaskLogSource         = "STG"
 	DefaultStagingTimeout = 15 * time.Minute
+
+	StagingTaskDomain = "cf-app-staging"
 )
 
 type FailureReasonSanitizer func(string) *cc_messages.StagingError
@@ -24,7 +26,6 @@ type FailureReasonSanitizer func(string) *cc_messages.StagingError
 type Backend interface {
 	StagingRequestsReceivedCounter() metric.Counter
 	StopStagingRequestsReceivedCounter() metric.Counter
-	TaskDomain() string
 
 	BuildRecipe(request cc_messages.StagingRequestFromCC) (receptor.TaskCreateRequest, error)
 	BuildStagingResponse(receptor.TaskResponse) (cc_messages.StagingResponseForCC, error)
@@ -38,6 +39,7 @@ var ErrMissingAppBitsDownloadUri = errors.New(diego_errors.MISSING_APP_BITS_DOWN
 var ErrMissingLifecycleData = errors.New(diego_errors.MISSING_LIFECYCLE_DATA_MESSAGE)
 
 type Config struct {
+	TaskDomain     string
 	CallbackURL    string
 	FileServerURL  string
 	Lifecycles     map[string]string

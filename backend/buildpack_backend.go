@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	TraditionalTaskDomain                         = "cf-app-staging"
+	TraditionalLifecycleName                      = "buildpack"
 	TraditionalStagingRequestsReceivedCounter     = metric.Counter("TraditionalStagingRequestsReceived")
 	TraditionalStopStagingRequestsReceivedCounter = metric.Counter("TraditionalStopStagingRequestsReceived")
 	StagingTaskCpuWeight                          = uint(50)
@@ -47,10 +47,6 @@ func (backend *traditionalBackend) StagingRequestsReceivedCounter() metric.Count
 
 func (backend *traditionalBackend) StopStagingRequestsReceivedCounter() metric.Counter {
 	return TraditionalStopStagingRequestsReceivedCounter
-}
-
-func (backend *traditionalBackend) TaskDomain() string {
-	return TraditionalTaskDomain
 }
 
 func (backend *traditionalBackend) BuildRecipe(request cc_messages.StagingRequestFromCC) (receptor.TaskCreateRequest, error) {
@@ -223,14 +219,15 @@ func (backend *traditionalBackend) BuildRecipe(request cc_messages.StagingReques
 	uploadMsg := fmt.Sprintf("Uploading %s...", strings.Join(uploadNames, ", "))
 	actions = append(actions, models.EmitProgressFor(models.Parallel(uploadActions...), uploadMsg, "Uploading complete", "Uploading failed"))
 
-	annotationJson, _ := json.Marshal(models.StagingTaskAnnotation{
-		AppId:  request.AppId,
-		TaskId: request.TaskId,
+	annotationJson, _ := json.Marshal(cc_messages.StagingTaskAnnotation{
+		Lifecycle: TraditionalLifecycleName,
+		AppId:     request.AppId,
+		TaskId:    request.TaskId,
 	})
 
 	task := receptor.TaskCreateRequest{
 		TaskGuid:              StagingTaskGuid(request.AppId, request.TaskId),
-		Domain:                TraditionalTaskDomain,
+		Domain:                backend.config.TaskDomain,
 		Stack:                 request.Stack,
 		ResultFile:            builderConfig.OutputMetadata(),
 		MemoryMB:              request.MemoryMB,
@@ -262,7 +259,7 @@ func (backend *traditionalBackend) BuildStagingResponseFromRequestError(request 
 func (backend *traditionalBackend) BuildStagingResponse(taskResponse receptor.TaskResponse) (cc_messages.StagingResponseForCC, error) {
 	var response cc_messages.StagingResponseForCC
 
-	var annotation models.StagingTaskAnnotation
+	var annotation cc_messages.StagingTaskAnnotation
 	err := json.Unmarshal([]byte(taskResponse.Annotation), &annotation)
 	if err != nil {
 		return cc_messages.StagingResponseForCC{}, err
