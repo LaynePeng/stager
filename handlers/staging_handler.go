@@ -46,6 +46,7 @@ func (handler *stagingHandler) Stage(resp http.ResponseWriter, req *http.Request
 
 	requestBody, err := ioutil.ReadAll(req.Body)
 	if err != nil {
+		logger.Error("read-body-failed", err)
 		resp.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -53,17 +54,20 @@ func (handler *stagingHandler) Stage(resp http.ResponseWriter, req *http.Request
 	var stagingRequest cc_messages.StagingRequestFromCC
 	err = json.Unmarshal(requestBody, &stagingRequest)
 	if err != nil {
+		logger.Error("unmarshal-request-failed", err)
 		resp.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	backend, ok := handler.backends[stagingRequest.Lifecycle]
 	if !ok {
+		logger.Error("backend-not-found", err, lager.Data{"backend": stagingRequest.Lifecycle})
 		resp.WriteHeader(http.StatusNotFound)
 		return
 	}
 
 	if stagingRequest.AppId == "" {
+		logger.Error("missing-app-id", err)
 		resp.WriteHeader(http.StatusBadRequest)
 		return
 	}
