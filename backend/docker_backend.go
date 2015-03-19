@@ -118,7 +118,7 @@ func (backend *dockerBackend) BuildRecipe(stagingGuid string, request cc_message
 		DiskMB:                request.DiskMB,
 		Action:                models.Timeout(models.Serial(actions...), dockerTimeout(request, backend.logger)),
 		CompletionCallbackURL: backend.config.CallbackURL(stagingGuid),
-		LogGuid:               request.AppId,
+		LogGuid:               request.LogGuid,
 		LogSource:             TaskLogSource,
 		Annotation:            string(annotationJson),
 		EgressRules:           request.EgressRules,

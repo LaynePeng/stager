@@ -127,6 +127,7 @@ var _ = Describe("DockerBackend", func() {
 
 		stagingRequest = cc_messages.StagingRequestFromCC{
 			AppId:           appId,
+			LogGuid:         "log-guid",
 			Stack:           "rabbit_hole",
 			FileDescriptors: fileDescriptors,
 			MemoryMB:        memoryMB,
@@ -186,7 +187,7 @@ var _ = Describe("DockerBackend", func() {
 		Ω(desiredTask.Domain).To(Equal("config-task-domain"))
 		Ω(desiredTask.TaskGuid).To(Equal(stagingGuid))
 		Ω(desiredTask.Stack).To(Equal("rabbit_hole"))
-		Ω(desiredTask.LogGuid).To(Equal("bunny"))
+		Ω(desiredTask.LogGuid).To(Equal("log-guid"))
 		Ω(desiredTask.LogSource).To(Equal(backend.TaskLogSource))
 		Ω(desiredTask.ResultFile).To(Equal("/tmp/docker-result/result.json"))
 		Ω(desiredTask.Privileged).Should(BeFalse())
